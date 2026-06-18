@@ -1,0 +1,19 @@
+-- Fase 2: seed de dados de teste — NAO EXECUTAR AUTOMATICAMENTE.
+--
+-- Rodar manualmente apos criar os usuarios admin@pcy.local e cliente1@teste.local
+-- no Auth dashboard do Supabase, substituindo os placeholders pelos UUIDs reais.
+--
+-- -- 1) Dois condominios de teste
+-- insert into public.condominios (id, nome, cnpj, endereco, ativo) values
+--   ('<UUID_CONDOMINIO_1>', 'Condominio Jardim das Flores', '00.000.000/0001-00', 'Rua A, 100', true),
+--   ('<UUID_CONDOMINIO_2>', 'Condominio Vista Verde', '00.000.000/0002-00', 'Rua B, 200', true);
+--
+-- -- 2) Vincula cliente1 a apenas UM dos condominios (Condominio 1)
+-- insert into public.user_condominios (user_id, condominio_id) values
+--   ('<UUID_CLIENTE1>', '<UUID_CONDOMINIO_1>');
+--
+-- -- 3) Tres pedidos: 2 no condominio vinculado ao cliente1, 1 no outro
+-- insert into public.pedidos (condominio_id, numero_pedido, valor, data_pedido, data_vencimento, status) values
+--   ('<UUID_CONDOMINIO_1>', 'PED-001', 1500.00, current_date, current_date + interval '10 days', 'pendente'),
+--   ('<UUID_CONDOMINIO_1>', 'PED-002', 800.50, current_date, current_date + interval '15 days', 'pendente'),
+--   ('<UUID_CONDOMINIO_2>', 'PED-003', 2200.00, current_date, current_date + interval '10 days', 'pendente');
