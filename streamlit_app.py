@@ -1,24 +1,29 @@
 import streamlit as st
 
-from lib.supabase_client import get_supabase_client
+from components.login_form import render_login_form
+from lib import auth
+from lib.supabase_client import set_session_from_state
 
-st.set_page_config(page_title="Portal PCY", page_icon="🟢")
+st.set_page_config(page_title="Portal PCY", page_icon="📦")
+
+set_session_from_state()
+
+user = auth.get_current_user()
+
+if user is None:
+    render_login_form()
+    st.stop()
+
+with st.sidebar:
+    st.write(user["nome_completo"])
+    st.write("👑 Admin" if user["is_admin"] else "👤 Cliente")
+    if st.button("Logout"):
+        auth.logout()
 
 st.title("Portal PCY — Notas e Boletos")
+st.write(f"Bem-vindo, {user['nome_completo']}")
 
-st.markdown(
-    "O Portal PCY centraliza o acesso a notas fiscais e boletos, permitindo "
-    "que clientes e equipe interna consultem, emitam e acompanhem documentos "
-    "financeiros em um único lugar, de forma segura e organizada."
-)
-
-if st.button("Testar conexão Supabase"):
-    try:
-        client = get_supabase_client()
-        client.auth.get_session()
-        st.success("Conexão com Supabase OK")
-    except Exception as e:
-        st.error(f"Falha na conexão: {e}")
-
-st.markdown("---")
-st.markdown("[Repositório no GitHub](https://github.com/ygorpradoch/portal-pcy)")
+if user["is_admin"]:
+    st.info("Dashboard será implementado na Fase 4.")
+else:
+    st.info("Dashboard será implementado na Fase 6.")
