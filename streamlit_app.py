@@ -26,4 +26,4 @@ st.write(f"Bem-vindo, {user['nome_completo']}")
 if user["is_admin"]:
     st.info("Use o menu lateral para gerenciar condomínios, vínculos e usuários.")
 else:
-    st.info("Dashboard será implementado na Fase 6.")
+    st.info("Use o menu lateral para acessar seus pedidos.")

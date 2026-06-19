@@ -2,6 +2,8 @@
 
 from collections import Counter
 
+import streamlit as st
+
 from lib.supabase_client import get_supabase_client, set_session_from_state
 
 
@@ -92,6 +94,20 @@ def listar_perfis() -> list[dict]:
 # --- Pedidos (Fase 5) ---
 
 
+def _montar_pedidos(dados: list[dict]) -> list[dict]:
+    """Achata o embed condominios(nome) em condominio_nome."""
+    pedidos = []
+    for p in dados:
+        p = dict(p)
+        condominio = p.pop("condominios", None)
+        # o embed pode vir como dict, lista (1->N detectado) ou None
+        if isinstance(condominio, list):
+            condominio = condominio[0] if condominio else None
+        nome = condominio.get("nome") if isinstance(condominio, dict) else None
+        pedidos.append({**p, "condominio_nome": nome})
+    return pedidos
+
+
 def listar_pedidos(condominio_id: str | None = None) -> list[dict]:
     set_session_from_state()
     client = get_supabase_client()
@@ -104,16 +120,7 @@ def listar_pedidos(condominio_id: str | None = None) -> list[dict]:
         if condominio_id:
             query = query.eq("condominio_id", condominio_id)
         resultado = query.order("data_pedido", desc=True).execute()
-        pedidos = []
-        for p in resultado.data:
-            p = dict(p)
-            condominio = p.pop("condominios", None)
-            # o embed pode vir como dict, lista (1->N detectado) ou None
-            if isinstance(condominio, list):
-                condominio = condominio[0] if condominio else None
-            nome = condominio.get("nome") if isinstance(condominio, dict) else None
-            pedidos.append({**p, "condominio_nome": nome})
-        return pedidos
+        return _montar_pedidos(resultado.data)
     except Exception as e:
         raise _falha("Não foi possível carregar os pedidos.", e) from e
 
@@ -405,3 +412,55 @@ def listar_perfis_com_contagem() -> list[dict]:
         ]
     except Exception as e:
         raise RuntimeError("Não foi possível carregar os usuários.") from e
+
+
+# --- Tela do cliente (Fase 6) ---
+
+
+def listar_condominios_do_usuario_atual() -> list[dict]:
+    """Condomínios vinculados ao usuário logado (via auth.uid() na RLS)."""
+    user = st.session_state.get("user")
+    if user is None:
+        return []
+    return listar_condominios_do_usuario(user.id)
+
+
+def listar_pedidos_do_cliente(
+    condominio_id: str,
+    status_pagamento: str | None = None,
+    data_inicio: str | None = None,
+    data_fim: str | None = None,
+    valor_min: float | None = None,
+    valor_max: float | None = None,
+) -> list[dict]:
+    """Pedidos do condomínio informado, com filtros opcionais.
+
+    A RLS já restringe os pedidos visíveis ao usuário logado; aqui só
+    aplicamos os filtros adicionais pedidos pelo cliente na tela.
+    """
+    set_session_from_state()
+    client = get_supabase_client()
+    try:
+        query = (
+            client.table("pedidos")
+            .select(
+                "id, numero_pedido, condominio_id, valor_total, status_pagamento, "
+                "status_entrega, data_pedido, data_vencimento, data_entrega, "
+                "linha_digitavel, nota_fiscal_path, boleto_path, condominios(nome)"
+            )
+            .eq("condominio_id", condominio_id)
+        )
+        if status_pagamento:
+            query = query.eq("status_pagamento", status_pagamento)
+        if data_inicio:
+            query = query.gte("data_pedido", data_inicio)
+        if data_fim:
+            query = query.lte("data_pedido", data_fim)
+        if valor_min is not None:
+            query = query.gte("valor_total", valor_min)
+        if valor_max is not None:
+            query = query.lte("valor_total", valor_max)
+        resultado = query.order("data_pedido", desc=True).execute()
+        return _montar_pedidos(resultado.data)
+    except Exception as e:
+        raise _falha("Não foi possível carregar os pedidos.", e) from e
