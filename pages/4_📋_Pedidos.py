@@ -191,8 +191,8 @@ def dialog_novo_pedido(condominios: list[dict]):
             _limpar_itens_form(state_key)
             st.success("Pedido criado com sucesso.")
             st.rerun()
-        except RuntimeError as e:
-            st.error(str(e))
+        except Exception as e:
+            st.error(f"Erro ao criar pedido: {type(e).__name__}: {e}")
 
 
 @st.dialog("Editar pedido", width="large")
@@ -295,8 +295,8 @@ def dialog_editar_pedido(pedido: dict, condominios: list[dict]):
             _limpar_itens_form(state_key)
             st.success("Pedido atualizado com sucesso.")
             st.rerun()
-        except RuntimeError as e:
-            st.error(str(e))
+        except Exception as e:
+            st.error(f"Erro ao atualizar pedido: {type(e).__name__}: {e}")
 
 
 # --- Página ---
@@ -320,8 +320,8 @@ if st.button("+ Novo pedido"):
 
 try:
     pedidos = queries.listar_pedidos(filtro_id)
-except RuntimeError as e:
-    st.error(str(e))
+except Exception as e:
+    st.error(f"Erro ao carregar pedidos: {type(e).__name__}: {e}")
     pedidos = []
 
 if not pedidos:

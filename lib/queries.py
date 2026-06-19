@@ -5,6 +5,14 @@ from collections import Counter
 from lib.supabase_client import get_supabase_client, set_session_from_state
 
 
+def _falha(msg: str, e: Exception) -> RuntimeError:
+    """Imprime o erro real nos logs (o Streamlit Cloud nao oculta logs) e
+    devolve um RuntimeError com o detalhe tecnico anexado, para que a causa
+    apareca na UI mesmo quando a mensagem original e omitida."""
+    print(f"[queries] {msg} :: {type(e).__name__}: {e}")
+    return RuntimeError(f"{msg} (detalhe: {type(e).__name__}: {e})")
+
+
 def listar_condominios(incluir_inativos: bool = False) -> list[dict]:
     set_session_from_state()
     client = get_supabase_client()
@@ -99,11 +107,16 @@ def listar_pedidos(condominio_id: str | None = None) -> list[dict]:
         resultado = query.order("data_pedido", desc=True).execute()
         pedidos = []
         for p in resultado.data:
-            condominio = p.pop("condominios", None) or {}
-            pedidos.append({**p, "condominio_nome": condominio.get("nome")})
+            p = dict(p)
+            condominio = p.pop("condominios", None)
+            # o embed pode vir como dict, lista (1->N detectado) ou None
+            if isinstance(condominio, list):
+                condominio = condominio[0] if condominio else None
+            nome = condominio.get("nome") if isinstance(condominio, dict) else None
+            pedidos.append({**p, "condominio_nome": nome})
         return pedidos
     except Exception as e:
-        raise RuntimeError("Não foi possível carregar os pedidos.") from e
+        raise _falha("Não foi possível carregar os pedidos.", e) from e
 
 
 def listar_itens_pedido(pedido_id: str) -> list[dict]:
@@ -155,15 +168,16 @@ def criar_pedido(
             )
             .execute()
         )
-        pedido = resultado.data[0]
+        pedido = dict(resultado.data[0])
+        pedido_id = pedido["id"]
     except Exception as e:
-        raise RuntimeError("Não foi possível criar o pedido.") from e
+        raise _falha("Não foi possível criar o pedido.", e) from e
 
     try:
         client.table("pedido_itens").insert(
             [
                 {
-                    "pedido_id": pedido["id"],
+                    "pedido_id": pedido_id,
                     "produto": item["produto"],
                     "quantidade": item["quantidade"],
                     "valor_unit": item["valor_unit"],
@@ -173,8 +187,11 @@ def criar_pedido(
         ).execute()
     except Exception as e:
         # rollback semântico: desfaz o pedido se os itens falharem
-        client.table("pedidos").delete().eq("id", pedido["id"]).execute()
-        raise RuntimeError("Não foi possível salvar os itens do pedido.") from e
+        try:
+            client.table("pedidos").delete().eq("id", pedido_id).execute()
+        except Exception as rollback_err:  # nao mascara o erro original
+            print(f"[queries] rollback do pedido falhou :: {rollback_err}")
+        raise _falha("Não foi possível salvar os itens do pedido.", e) from e
 
     return pedido
 
@@ -284,7 +301,7 @@ def gerar_url_documento(caminho_storage: str) -> str:
             caminho_storage, 300
         )
     except Exception as e:
-        raise RuntimeError("Não foi possível gerar o link do documento.") from e
+        raise _falha("Não foi possível gerar o link do documento.", e) from e
 
     url = None
     for chave in ("signedURL", "signedUrl", "signed_url"):
@@ -295,6 +312,7 @@ def gerar_url_documento(caminho_storage: str) -> str:
         if url:
             break
     if not url:
+        print(f"[queries] create_signed_url sem URL :: {resposta!r}")
         raise RuntimeError("Não foi possível gerar o link do documento.")
     return url
 
