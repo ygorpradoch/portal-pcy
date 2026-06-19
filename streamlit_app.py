@@ -24,6 +24,6 @@ st.title("Portal PCY — Notas e Boletos")
 st.write(f"Bem-vindo, {user['nome_completo']}")
 
 if user["is_admin"]:
-    st.info("Dashboard será implementado na Fase 4.")
+    st.info("Use o menu lateral para gerenciar condomínios, vínculos e usuários.")
 else:
     st.info("Dashboard será implementado na Fase 6.")
