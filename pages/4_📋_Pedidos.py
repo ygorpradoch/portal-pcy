@@ -22,6 +22,17 @@ def _novo_item() -> dict:
     return {"_uid": uuid.uuid4().hex, "produto": "", "quantidade": 1.0, "valor_unit": 0.0}
 
 
+def _add_item(state_key: str) -> None:
+    # callback on_click: muta o estado sem st.rerun(), assim o dialog nao fecha
+    st.session_state[state_key].append(_novo_item())
+
+
+def _remove_item(state_key: str, uid: str) -> None:
+    st.session_state[state_key] = [
+        it for it in st.session_state[state_key] if it["_uid"] != uid
+    ]
+
+
 def _limpar_itens_form(state_key: str) -> None:
     for k in list(st.session_state.keys()):
         if k.startswith(state_key):
@@ -83,19 +94,23 @@ def _render_itens(state_key: str, itens_iniciais: list[dict] | None = None) -> l
             format="%.2f",
             label_visibility="collapsed",
         )
-        if c_rem.button("✕", key=f"{state_key}_rem_{uid}"):
-            st.session_state[state_key] = [
-                it for it in st.session_state[state_key] if it["_uid"] != uid
-            ]
-            st.rerun()
+        c_rem.button(
+            "✕",
+            key=f"{state_key}_rem_{uid}",
+            on_click=_remove_item,
+            args=(state_key, uid),
+        )
 
         coletados.append(
             {"produto": produto, "quantidade": quantidade, "valor_unit": valor_unit}
         )
 
-    if st.button("+ Adicionar item", key=f"{state_key}_add"):
-        st.session_state[state_key].append(_novo_item())
-        st.rerun()
+    st.button(
+        "+ Adicionar item",
+        key=f"{state_key}_add",
+        on_click=_add_item,
+        args=(state_key,),
+    )
 
     return coletados
 
@@ -192,7 +207,8 @@ def dialog_novo_pedido(condominios: list[dict]):
             st.success("Pedido criado com sucesso.")
             st.rerun()
         except Exception as e:
-            st.error(f"Erro ao criar pedido: {type(e).__name__}: {e}")
+            print(f"[pedidos] criar_pedido :: {type(e).__name__}: {e}")
+            st.error("Não foi possível criar o pedido. Tente novamente.")
 
 
 @st.dialog("Editar pedido", width="large")
@@ -296,7 +312,8 @@ def dialog_editar_pedido(pedido: dict, condominios: list[dict]):
             st.success("Pedido atualizado com sucesso.")
             st.rerun()
         except Exception as e:
-            st.error(f"Erro ao atualizar pedido: {type(e).__name__}: {e}")
+            print(f"[pedidos] atualizar_pedido :: {type(e).__name__}: {e}")
+            st.error("Não foi possível atualizar o pedido. Tente novamente.")
 
 
 # --- Página ---
@@ -321,7 +338,8 @@ if st.button("+ Novo pedido"):
 try:
     pedidos = queries.listar_pedidos(filtro_id)
 except Exception as e:
-    st.error(f"Erro ao carregar pedidos: {type(e).__name__}: {e}")
+    print(f"[pedidos] listar_pedidos :: {type(e).__name__}: {e}")
+    st.error("Não foi possível carregar os pedidos. Tente novamente.")
     pedidos = []
 
 if not pedidos:

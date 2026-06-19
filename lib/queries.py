@@ -6,11 +6,10 @@ from lib.supabase_client import get_supabase_client, set_session_from_state
 
 
 def _falha(msg: str, e: Exception) -> RuntimeError:
-    """Imprime o erro real nos logs (o Streamlit Cloud nao oculta logs) e
-    devolve um RuntimeError com o detalhe tecnico anexado, para que a causa
-    apareca na UI mesmo quando a mensagem original e omitida."""
+    """Registra o erro real nos logs (o Streamlit Cloud nao oculta logs) e
+    devolve um RuntimeError com mensagem limpa em portugues para a UI."""
     print(f"[queries] {msg} :: {type(e).__name__}: {e}")
-    return RuntimeError(f"{msg} (detalhe: {type(e).__name__}: {e})")
+    return RuntimeError(msg)
 
 
 def listar_condominios(incluir_inativos: bool = False) -> list[dict]:
