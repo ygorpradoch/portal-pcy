@@ -1,6 +1,7 @@
 """Consultas e operacoes no banco de dados Supabase."""
 
 from collections import Counter
+from datetime import datetime, timezone
 
 import streamlit as st
 
@@ -464,3 +465,26 @@ def listar_pedidos_do_cliente(
         return _montar_pedidos(resultado.data)
     except Exception as e:
         raise _falha("Não foi possível carregar os pedidos.", e) from e
+
+
+def marcar_pedido_como_pago(pedido_id: str) -> None:
+    """Marca o pedido como pago. A RLS só permite o UPDATE se o pedido
+    pertencer ao condomínio do usuário logado e estiver pendente."""
+    set_session_from_state()
+    client = get_supabase_client()
+    pago_em = datetime.now(timezone.utc).isoformat()
+    try:
+        resultado = (
+            client.table("pedidos")
+            .update({"status_pagamento": "pago", "pago_em": pago_em})
+            .eq("id", pedido_id)
+            .execute()
+        )
+    except Exception as e:
+        raise _falha("Não foi possível marcar o pedido como pago.", e) from e
+
+    if not resultado.data:
+        raise RuntimeError(
+            "Não foi possível marcar o pedido como pago. "
+            "Ele pode já estar pago ou você não tem permissão."
+        )

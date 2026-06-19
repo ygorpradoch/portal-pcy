@@ -203,4 +203,33 @@ for pedido in pedidos:
         if not tem_documento:
             st.caption("Documentos não disponíveis ainda.")
 
+        if pedido["status_pagamento"] == "pendente":
+            st.divider()
+            chave_flag = f"confirmar_pagamento_{pedido['id']}"
+            if not st.session_state.get(chave_flag):
+                if st.button("✅ Marcar como pago", key=f"btn_pagar_{pedido['id']}"):
+                    st.session_state[chave_flag] = True
+                    st.rerun()
+            else:
+                st.warning("Confirmar pagamento? Esta ação não pode ser desfeita.")
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button(
+                        "✔ Confirmar",
+                        key=f"btn_confirmar_{pedido['id']}",
+                        type="primary",
+                    ):
+                        try:
+                            queries.marcar_pedido_como_pago(pedido["id"])
+                            st.session_state.pop(chave_flag, None)
+                            st.success("Pedido marcado como pago com sucesso.")
+                            st.rerun()
+                        except RuntimeError as e:
+                            st.error(str(e))
+                            st.session_state.pop(chave_flag, None)
+                with col2:
+                    if st.button("✖ Cancelar", key=f"btn_cancelar_{pedido['id']}"):
+                        st.session_state.pop(chave_flag, None)
+                        st.rerun()
+
     st.divider()
