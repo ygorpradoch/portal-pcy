@@ -58,8 +58,7 @@ def restaurar_sessao_do_cookie() -> None:
     if st.session_state.get("refresh_token"):
         return
 
-    cookies = get_cookie_manager().get_all(key="get_all_cookies")
-    refresh_token = cookies.get(NOME_COOKIE) if cookies else None
+    refresh_token = get_cookie_manager().get(NOME_COOKIE)
     if not refresh_token:
         return
 

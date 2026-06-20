@@ -2,9 +2,16 @@ import streamlit as st
 
 from components.login_form import render_login_form
 from lib import auth
+from lib.cookie_manager import get_cookie_manager
 from lib.supabase_client import set_session_from_state
 
 st.set_page_config(page_title="Portal PCY", page_icon="📦")
+
+get_cookie_manager()  # renderiza o componente no DOM antes de ler cookies
+
+if "cookie_manager_ready" not in st.session_state:
+    st.session_state["cookie_manager_ready"] = True
+    st.rerun()  # 2a execução: cookies já disponíveis para o componente
 
 set_session_from_state()
 auth.restaurar_sessao_do_cookie()
