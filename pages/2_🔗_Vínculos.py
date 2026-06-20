@@ -4,7 +4,11 @@ from lib import auth, queries
 from lib.supabase_client import set_session_from_state
 
 set_session_from_state()
-auth.require_admin()
+# auth.require_admin() removido: st.navigation() em streamlit_app.py já
+# restringe esta página a administradores (páginas fora da lista de
+# st.navigation() ficam inacessíveis). require_auth() fica como defesa
+# em profundidade.
+auth.require_auth()
 
 st.title("🔗 Vínculos Cliente ↔ Condomínio")
 

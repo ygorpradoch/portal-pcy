@@ -3,3 +3,4 @@ supabase==2.31.0
 python-dotenv
 pandas
 streamlit-pdf-viewer
+extra-streamlit-components==0.1.81
