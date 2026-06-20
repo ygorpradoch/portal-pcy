@@ -40,6 +40,11 @@ def login(email: str, senha: str) -> tuple[bool, str | None]:
     st.session_state["refresh_token"] = response.session.refresh_token
     st.session_state["user"] = response.user
     _salvar_cookie_refresh_token(response.session.refresh_token)
+    # DEBUG TEMPORÁRIO — remover após diagnóstico
+    st.write(
+        f"[DEBUG] Cookie salvo: pcy_refresh_token = "
+        f"{repr(response.session.refresh_token[:20])}..."
+    )
     return True, None
 
 
@@ -55,18 +60,27 @@ def restaurar_sessao_do_cookie() -> None:
     """Restaura a sessao a partir do refresh_token salvo em cookie, se a
     sessao em memoria (session_state) estiver vazia — caso de F5 ou nova
     aba. Sem cookie ou com cookie invalido, segue para a tela de login."""
-    if st.session_state.get("refresh_token"):
-        return
+    cm = get_cookie_manager()
+    refresh_token = cm.get(NOME_COOKIE)
 
-    refresh_token = get_cookie_manager().get(NOME_COOKIE)
+    # DEBUG TEMPORÁRIO — remover após diagnóstico
+    st.write(f"[DEBUG] refresh_token do cookie: {repr(refresh_token)}")
+
     if not refresh_token:
+        st.write("[DEBUG] Cookie vazio ou não encontrado — abortando restauração")
         return
 
-    client = get_supabase_client()
+    if st.session_state.get("refresh_token"):
+        st.write("[DEBUG] session_state já tem refresh_token — skip")
+        return
+
+    st.write("[DEBUG] Tentando refresh_session com o token do cookie...")
     try:
-        response = client.auth.refresh_session(refresh_token)
-    except Exception:
-        get_cookie_manager().delete(NOME_COOKIE, key="delete_pcy_refresh_token")
+        response = get_supabase_client().auth.refresh_session(refresh_token)
+        st.write(f"[DEBUG] refresh_session retornou: {repr(response)}")
+    except Exception as e:
+        st.write(f"[DEBUG] refresh_session lançou exceção: {repr(e)}")
+        cm.delete(NOME_COOKIE, key="delete_pcy_refresh_token")
         return
 
     st.session_state["access_token"] = response.session.access_token
