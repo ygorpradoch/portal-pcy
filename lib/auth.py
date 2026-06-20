@@ -1,5 +1,6 @@
 """Autenticacao e gerenciamento de sessao de usuario."""
 
+import time
 from datetime import datetime, timedelta, timezone
 
 import streamlit as st
@@ -25,6 +26,11 @@ def _salvar_cookie_refresh_token(refresh_token: str) -> None:
         secure=True,
         same_site="lax",
     )
+    # O componente precisa de um round-trip real (iframe -> JS -> document.cookie)
+    # para persistir a escrita no browser. Sem essa pausa, um st.rerun() logo
+    # em seguida (ex.: apos login()) substitui a arvore de elementos antes do
+    # iframe terminar de montar, e o cookie nunca chega a ser escrito de fato.
+    time.sleep(0.3)
 
 
 def login(email: str, senha: str) -> tuple[bool, str | None]:
@@ -53,6 +59,10 @@ def logout() -> None:
     for chave in ("access_token", "refresh_token", "user", "perfil"):
         st.session_state.pop(chave, None)
     get_cookie_manager().delete(NOME_COOKIE, key="delete_pcy_refresh_token")
+    # Mesma razao do sleep em _salvar_cookie_refresh_token: dar tempo do
+    # componente remover o cookie no browser antes do rerun substituir a
+    # arvore de elementos.
+    time.sleep(0.3)
     st.rerun()
 
 
