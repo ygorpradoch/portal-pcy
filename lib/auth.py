@@ -59,19 +59,29 @@ def logout() -> None:
 def restaurar_sessao_do_cookie() -> None:
     """Restaura a sessao a partir do refresh_token salvo em cookie, se a
     sessao em memoria (session_state) estiver vazia — caso de F5 ou nova
-    aba. Sem cookie ou com cookie invalido, segue para a tela de login."""
+    aba. Sem cookie ou com cookie invalido, segue para a tela de login.
+
+    IMPORTANTE: usa get_all(), não get(). get() só le o dict self.cookies
+    que o CookieManager populou da ultima vez que get_all()/__init__ rodou
+    — como o CookieManager e um singleton em session_state, __init__ só
+    executa uma vez por sessao de browser, e nessa primeira execucao o
+    round-trip do browser ainda nao voltou. Chamar get_all() com a mesma
+    key em todo run mantem essa chamada "viva" para o componente poder
+    entregar o valor real (via rerun automatico da propria lib) quando o
+    browser responder."""
+    if st.session_state.get("refresh_token"):
+        return
+
     cm = get_cookie_manager()
-    refresh_token = cm.get(NOME_COOKIE)
+    cookies = cm.get_all(key="get_all_cookies")
+    refresh_token = cookies.get(NOME_COOKIE) if cookies else None
 
     # DEBUG TEMPORÁRIO — remover após diagnóstico
+    st.write(f"[DEBUG] cookies retornados por get_all(): {repr(cookies)}")
     st.write(f"[DEBUG] refresh_token do cookie: {repr(refresh_token)}")
 
     if not refresh_token:
         st.write("[DEBUG] Cookie vazio ou não encontrado — abortando restauração")
-        return
-
-    if st.session_state.get("refresh_token"):
-        st.write("[DEBUG] session_state já tem refresh_token — skip")
         return
 
     st.write("[DEBUG] Tentando refresh_session com o token do cookie...")
