@@ -488,3 +488,27 @@ def marcar_pedido_como_pago(pedido_id: str) -> None:
             "Não foi possível marcar o pedido como pago. "
             "Ele pode já estar pago ou você não tem permissão."
         )
+
+
+def listar_todos_pedidos_do_cliente() -> list[dict]:
+    """Pedidos de todos os condomínios vinculados ao usuário logado.
+
+    A RLS já restringe os pedidos visíveis ao usuário logado, então não
+    é preciso filtrar por condominio_id aqui.
+    """
+    set_session_from_state()
+    client = get_supabase_client()
+    try:
+        resultado = (
+            client.table("pedidos")
+            .select(
+                "id, numero_pedido, condominio_id, valor_total, status_pagamento, "
+                "status_entrega, data_pedido, data_vencimento, data_entrega, "
+                "linha_digitavel, nota_fiscal_path, boleto_path, condominios(nome)"
+            )
+            .order("data_pedido", desc=True)
+            .execute()
+        )
+        return _montar_pedidos(resultado.data)
+    except Exception as e:
+        raise _falha("Não foi possível carregar os pedidos.", e) from e
