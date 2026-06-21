@@ -96,17 +96,12 @@ def restaurar_sessao_do_cookie() -> None:
     cookies = cm.get_all(key="get_all_cookies")
     refresh_token = cookies.get(NOME_COOKIE) if cookies else None
 
-    # DEBUG TEMPORÁRIO — remover após confirmar a persistência
-    st.write(f"[DEBUG] cookies do browser: {repr(cookies)}")
-    st.write(f"[DEBUG] pcy_refresh_token: {repr(refresh_token)}")
-
     if not refresh_token:
         return
 
     try:
         response = get_supabase_client().auth.refresh_session(refresh_token)
-    except Exception as e:
-        st.write(f"[DEBUG] refresh_session falhou: {repr(e)}")
+    except Exception:
         cm.delete(NOME_COOKIE, key="delete_pcy_refresh_token")
         return
 
