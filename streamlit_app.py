@@ -17,13 +17,27 @@ st.markdown("""
 <style>
 #MainMenu {display: none !important;}
 footer {display: none !important;}
-header {display: none !important;}
+header {background: none !important; box-shadow: none !important;}
+header [data-testid="stToolbar"] {display: none !important;}
+header [data-testid="stDecoration"] {display: none !important;}
+header [data-testid="stHeader"] {background: none !important;}
 [data-testid="manage-app-button"] {display: none !important;}
 [data-testid="stToolbarActions"] {display: none !important;}
 [data-testid="stStatusWidget"] {display: none !important;}
 [data-testid="stDeployButton"] {display: none !important;}
 div[class*="ProfileIcon"] {display: none !important;}
 div[class*="AccountMenu"] {display: none !important;}
+
+@media (max-width: 768px) {
+  section[data-testid="stSidebar"] {
+    min-width: 80vw !important;
+    max-width: 80vw !important;
+  }
+  .block-container {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+}
 </style>
 """, unsafe_allow_html=True)
 

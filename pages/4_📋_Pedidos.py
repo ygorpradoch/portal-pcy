@@ -344,6 +344,7 @@ with col_busca:
 filtro_id = opcoes_filtro[filtro_nome]
 
 with col_filtros:
+    st.write("")
     with st.popover("🔍 Filtros", use_container_width=True):
         st.selectbox(
             "Pagamento",
@@ -383,6 +384,7 @@ with col_filtros:
             st.rerun()
 
 with col_novo:
+    st.write("")
     if st.button("+ Novo pedido"):
         if not condominios:
             st.error("Cadastre um condomínio antes de criar pedidos.")
