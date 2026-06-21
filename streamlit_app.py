@@ -64,8 +64,9 @@ paginas_cliente = [
     st.Page("pages/5_📦_Meus Pedidos.py", title="Meus Pedidos", icon="📦"),
 ]
 
-st.sidebar.image("assets/pcy-logo.png", use_container_width=True)
-st.sidebar.divider()
+# st.logo() fixa a logo no topo da sidebar, acima da navegação (st.navigation
+# fixa o menu no topo, então st.sidebar.image cairia abaixo dele).
+st.logo("assets/pcy-logo.png", size="large")
 
 pg = st.navigation(paginas_admin if user["is_admin"] else paginas_cliente)
 pg.run()
