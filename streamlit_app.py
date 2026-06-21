@@ -7,6 +7,14 @@ from lib.supabase_client import set_session_from_state
 
 st.set_page_config(page_title="Portal PCY", page_icon="📦")
 
+st.markdown("""
+<style>
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+header {visibility: hidden;}
+</style>
+""", unsafe_allow_html=True)
+
 get_cookie_manager()  # monta o componente de cookie no DOM
 
 # Aplica escrita/remoção de cookie adiada por login()/logout(). Precisa rodar

@@ -58,6 +58,32 @@ def _baixar_documento(label: str, path: str) -> None:
         st.error(str(e))
 
 
+def _badge_vencimento(pedido: dict) -> str | None:
+    """Badge de urgência de cobrança — só para pendentes com vencimento."""
+    if pedido["status_pagamento"] != "pendente":
+        return None
+    venc = pedido.get("data_vencimento")
+    if not venc:
+        return None
+    dias = (date.fromisoformat(venc) - date.today()).days
+    if dias < 0:
+        return _badge(f"⚠️ Vencido há {abs(dias)} dia(s)", "#dc3545")
+    if dias == 0:
+        return _badge("⚠️ Vence hoje", "#dc3545")
+    if dias <= 3:
+        return _badge(f"⏰ Vence em {dias} dia(s)", "#f0ad4e")
+    return None
+
+
+def _legenda_data(pedido: dict) -> str:
+    legenda = f"Pedido em {_formatar_data(pedido.get('data_pedido'))}"
+    if pedido["status_pagamento"] == "pendente" and pedido.get("data_vencimento"):
+        legenda += f" · vence {_formatar_data(pedido['data_vencimento'])}"
+    elif pedido.get("data_entrega"):
+        legenda += f" · entregue {_formatar_data(pedido['data_entrega'])}"
+    return legenda
+
+
 # --- Seleção de condomínio ---
 
 try:
@@ -72,47 +98,76 @@ if not condominios:
     )
     st.stop()
 
-if len(condominios) == 1:
-    condominio_id = condominios[0]["condominio_id"]
-    st.caption(f"Condomínio: {condominios[0]['nome']}")
-else:
-    opcoes_condominio = {c["nome"]: c["condominio_id"] for c in condominios}
-    nome_condominio = st.selectbox("Condomínio", list(opcoes_condominio.keys()))
-    condominio_id = opcoes_condominio[nome_condominio]
-
-# --- Filtros ---
-
 st.session_state.setdefault("filtro_status", "Todos")
 st.session_state.setdefault("filtro_data_inicio", date.today() - timedelta(days=90))
 st.session_state.setdefault("filtro_data_fim", date.today())
 st.session_state.setdefault("filtro_valor_min", None)
 st.session_state.setdefault("filtro_valor_max", None)
 
-with st.expander("🔍 Filtros", expanded=False):
-    st.selectbox("Status de pagamento", STATUS_PAGAMENTO_OPCOES, key="filtro_status")
+col_busca, col_filtros = st.columns([3, 1])
 
-    col_data_ini, col_data_fim = st.columns(2)
-    col_data_ini.date_input("De", key="filtro_data_inicio")
-    col_data_fim.date_input("Até", key="filtro_data_fim")
+with col_busca:
+    if len(condominios) == 1:
+        condominio_id = condominios[0]["condominio_id"]
+        st.caption(f"Condomínio: {condominios[0]['nome']}")
+    else:
+        opcoes_condominio = {c["nome"]: c["condominio_id"] for c in condominios}
+        nome_condominio = st.selectbox(
+            "Condomínio",
+            list(opcoes_condominio.keys()),
+            index=None,
+            placeholder="Pesquisar condomínio…",
+            label_visibility="collapsed",
+            key="sel_condominio",
+        )
+        if nome_condominio is None:
+            st.info("Selecione um condomínio para ver os pedidos.")
+            st.stop()
+        condominio_id = opcoes_condominio[nome_condominio]
 
-    col_valor_min, col_valor_max = st.columns(2)
-    col_valor_min.number_input(
-        "Valor mínimo", key="filtro_valor_min", min_value=0.0, step=10.0, format="%.2f"
+with col_filtros:
+    with st.popover("🔍 Filtros", use_container_width=True):
+        st.selectbox(
+            "Status de pagamento", STATUS_PAGAMENTO_OPCOES, key="filtro_status"
+        )
+        col_data_ini, col_data_fim = st.columns(2)
+        col_data_ini.date_input("De", key="filtro_data_inicio")
+        col_data_fim.date_input("Até", key="filtro_data_fim")
+        col_valor_min, col_valor_max = st.columns(2)
+        col_valor_min.number_input(
+            "Valor mínimo", key="filtro_valor_min", min_value=0.0, step=10.0,
+            format="%.2f",
+        )
+        col_valor_max.number_input(
+            "Valor máximo", key="filtro_valor_max", min_value=0.0, step=10.0,
+            format="%.2f",
+        )
+        col_aplicar, col_limpar = st.columns(2)
+        if col_aplicar.button("Aplicar filtros", type="primary"):
+            st.rerun()
+        if col_limpar.button("Limpar filtros"):
+            for chave in FILTROS_CHAVES:
+                st.session_state.pop(chave, None)
+            st.rerun()
+
+# --- Métrica: total em aberto (todos os pendentes, ignora filtros) ---
+
+try:
+    todos = queries.listar_pedidos_do_cliente(condominio_id)
+    total_em_aberto = sum(
+        p["valor_total"] for p in todos if p["status_pagamento"] == "pendente"
     )
-    col_valor_max.number_input(
-        "Valor máximo", key="filtro_valor_max", min_value=0.0, step=10.0, format="%.2f"
-    )
+except RuntimeError:
+    total_em_aberto = 0.0
 
-    col_aplicar, col_limpar = st.columns(2)
-    if col_aplicar.button("Aplicar filtros", type="primary"):
-        st.rerun()
-    if col_limpar.button("Limpar filtros"):
-        for chave in FILTROS_CHAVES:
-            st.session_state.pop(chave, None)
-        st.rerun()
+st.metric("Em aberto", _moeda(total_em_aberto))
+
+# --- Filtros aplicados à listagem ---
 
 status_filtro = (
-    None if st.session_state["filtro_status"] == "Todos" else st.session_state["filtro_status"]
+    None
+    if st.session_state["filtro_status"] == "Todos"
+    else st.session_state["filtro_status"]
 )
 data_inicio = st.session_state["filtro_data_inicio"]
 data_fim = st.session_state["filtro_data_fim"]
@@ -140,71 +195,34 @@ if not pedidos:
     st.info("Nenhum pedido encontrado para os filtros selecionados.")
 
 for pedido in pedidos:
-    cols = st.columns([2, 1.5, 2, 2, 2])
-    cols[0].write(f"**{pedido.get('numero_pedido') or '—'}**")
-    cols[1].write(_formatar_data(pedido.get("data_pedido")))
-    cols[2].write(_moeda(pedido["valor_total"]))
+    with st.container(border=True):
+        col_info, col_valor = st.columns([3, 2])
+        with col_info:
+            st.markdown(f"**{pedido.get('numero_pedido') or '—'}**")
+            st.caption(_legenda_data(pedido))
+        with col_valor:
+            st.markdown(
+                f"<div style='text-align:right;font-size:1.5em;font-weight:700'>"
+                f"{_moeda(pedido['valor_total'])}</div>",
+                unsafe_allow_html=True,
+            )
 
-    texto_pgto, cor_pgto = BADGES_PAGAMENTO.get(
-        pedido["status_pagamento"], (pedido["status_pagamento"], "#6c757d")
-    )
-    cols[3].markdown(_badge(texto_pgto, cor_pgto), unsafe_allow_html=True)
-
-    texto_entrega, cor_entrega = BADGES_ENTREGA.get(
-        pedido["status_entrega"], (pedido["status_entrega"], "#6c757d")
-    )
-    cols[4].markdown(_badge(texto_entrega, cor_entrega), unsafe_allow_html=True)
-
-    with st.expander(
-        f"📋 Detalhes — {pedido.get('numero_pedido') or pedido['id']}", expanded=False
-    ):
-        st.subheader("Itens do pedido")
-        try:
-            itens = queries.listar_itens_pedido(pedido["id"])
-        except RuntimeError as e:
-            st.error(str(e))
-            itens = []
-
-        if itens:
-            tabela = [
-                {
-                    "Produto": item["produto"],
-                    "Quantidade": item["quantidade"],
-                    "Valor Unit.": _moeda(item["valor_unit"]),
-                    "Total Item": _moeda(item["valor_total_item"]),
-                }
-                for item in itens
-            ]
-            st.dataframe(tabela, hide_index=True, use_container_width=True)
-        else:
-            st.caption("Nenhum item cadastrado.")
-        st.write(f"**Total do pedido:** {_moeda(pedido['valor_total'])}")
-
-        st.subheader("Datas")
-        st.write(f"**Data do pedido:** {_formatar_data(pedido.get('data_pedido'))}")
-        st.write(
-            f"**Data de vencimento:** {_formatar_data(pedido.get('data_vencimento'))}"
-        )
-        if pedido.get("data_entrega"):
-            st.write(f"**Data de entrega:** {_formatar_data(pedido['data_entrega'])}")
-
-        st.subheader("Documentos")
-        tem_documento = False
-        if pedido.get("nota_fiscal_path"):
-            tem_documento = True
-            _baixar_documento("⬇️ Baixar Nota Fiscal", pedido["nota_fiscal_path"])
-        if pedido.get("boleto_path"):
-            tem_documento = True
-            _baixar_documento("⬇️ Baixar Boleto", pedido["boleto_path"])
-        if pedido.get("linha_digitavel"):
-            tem_documento = True
-            st.code(pedido["linha_digitavel"])
-            st.caption("Copie a linha digitável para pagar o boleto")
-        if not tem_documento:
-            st.caption("Documentos não disponíveis ainda.")
+        badges = [
+            _badge(*BADGES_PAGAMENTO.get(
+                pedido["status_pagamento"],
+                (pedido["status_pagamento"], "#6c757d"),
+            )),
+            _badge(*BADGES_ENTREGA.get(
+                pedido["status_entrega"],
+                (pedido["status_entrega"], "#6c757d"),
+            )),
+        ]
+        venc = _badge_vencimento(pedido)
+        if venc:
+            badges.append(venc)
+        st.markdown(" ".join(badges), unsafe_allow_html=True)
 
         if pedido["status_pagamento"] == "pendente":
-            st.divider()
             chave_flag = f"confirmar_pagamento_{pedido['id']}"
             if not st.session_state.get(chave_flag):
                 if st.button("✅ Marcar como pago", key=f"btn_pagar_{pedido['id']}"):
@@ -232,4 +250,50 @@ for pedido in pedidos:
                         st.session_state.pop(chave_flag, None)
                         st.rerun()
 
-    st.divider()
+        with st.expander("Ver itens e documentos", expanded=False):
+            st.subheader("Itens do pedido")
+            try:
+                itens = queries.listar_itens_pedido(pedido["id"])
+            except RuntimeError as e:
+                st.error(str(e))
+                itens = []
+
+            if itens:
+                tabela = [
+                    {
+                        "Produto": item["produto"],
+                        "Quantidade": item["quantidade"],
+                        "Valor Unit.": _moeda(item["valor_unit"]),
+                        "Total Item": _moeda(item["valor_total_item"]),
+                    }
+                    for item in itens
+                ]
+                st.dataframe(tabela, hide_index=True, use_container_width=True)
+            else:
+                st.caption("Nenhum item cadastrado.")
+            st.write(f"**Total do pedido:** {_moeda(pedido['valor_total'])}")
+
+            st.subheader("Datas")
+            st.write(f"**Data do pedido:** {_formatar_data(pedido.get('data_pedido'))}")
+            st.write(
+                f"**Data de vencimento:** {_formatar_data(pedido.get('data_vencimento'))}"
+            )
+            if pedido.get("data_entrega"):
+                st.write(
+                    f"**Data de entrega:** {_formatar_data(pedido['data_entrega'])}"
+                )
+
+            st.subheader("Documentos")
+            tem_documento = False
+            if pedido.get("nota_fiscal_path"):
+                tem_documento = True
+                _baixar_documento("⬇️ Baixar Nota Fiscal", pedido["nota_fiscal_path"])
+            if pedido.get("boleto_path"):
+                tem_documento = True
+                _baixar_documento("⬇️ Baixar Boleto", pedido["boleto_path"])
+            if pedido.get("linha_digitavel"):
+                tem_documento = True
+                st.code(pedido["linha_digitavel"])
+                st.caption("Copie a linha digitável para pagar o boleto")
+            if not tem_documento:
+                st.caption("Documentos não disponíveis ainda.")
