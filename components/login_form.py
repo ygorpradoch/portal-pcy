@@ -8,7 +8,9 @@ from lib import auth
 def render_login_form() -> None:
     _, col, _ = st.columns([1, 2, 1])
     with col:
-        st.markdown("<h1 style='text-align: center;'>📦</h1>", unsafe_allow_html=True)
+        _, col_logo, _ = st.columns([2, 1, 2])
+        with col_logo:
+            st.image("assets/pcy-icon.png", use_container_width=True)
         st.markdown("<h2 style='text-align: center;'>Portal PCY</h2>", unsafe_allow_html=True)
 
         with st.form("login_form"):

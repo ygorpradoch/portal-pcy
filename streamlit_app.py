@@ -69,11 +69,15 @@ paginas_cliente = [
 st.logo("assets/pcy-logo.png", size="large")
 
 pg = st.navigation(paginas_admin if user["is_admin"] else paginas_cliente)
-pg.run()
 
+# Rodapé do usuário renderizado ANTES de pg.run() para a sidebar ficar estática:
+# se a página chamar st.stop(), este bloco já estará na tela (não some ao trocar
+# de aba). st.navigation fixa o menu no topo, então este conteúdo cai abaixo dele.
 st.sidebar.divider()
 st.sidebar.write(user["nome_completo"])
 badge_texto = "👑 Admin" if user["is_admin"] else "👤 Cliente"
 st.sidebar.caption(badge_texto)
 if st.sidebar.button("Sair da conta", use_container_width=True):
     auth.logout()
+
+pg.run()
