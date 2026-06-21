@@ -6,23 +6,24 @@ from lib import auth
 from lib.cookie_manager import get_cookie_manager
 from lib.supabase_client import set_session_from_state
 
-logo = Image.open("assets/pcy-logo.png")
+icon = Image.open("assets/pcy-icon.png")
 st.set_page_config(
     page_title="Portal PCY",
-    page_icon=logo,
+    page_icon=icon,
     layout="wide",
 )
 
 st.markdown("""
 <style>
-#MainMenu {visibility: hidden;}
-footer {visibility: hidden;}
-header {visibility: hidden;}
+#MainMenu {display: none !important;}
+footer {display: none !important;}
+header {display: none !important;}
 [data-testid="manage-app-button"] {display: none !important;}
 [data-testid="stToolbarActions"] {display: none !important;}
-section[data-testid="stSidebar"] [data-testid="stImage"] img {
-    padding: 0.5rem 1rem;
-}
+[data-testid="stStatusWidget"] {display: none !important;}
+[data-testid="stDeployButton"] {display: none !important;}
+div[class*="ProfileIcon"] {display: none !important;}
+div[class*="AccountMenu"] {display: none !important;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -44,12 +45,7 @@ if user is None:
 
 
 def _pagina_inicio() -> None:
-    col_logo, col_titulo = st.columns([1, 3])
-    with col_logo:
-        st.image("assets/pcy-logo.png", width=160)
-    with col_titulo:
-        st.title("Portal PCY — Notas e Boletos")
-        st.caption("Bem-vindo, acesse seus pedidos pelo menu lateral.")
+    st.title("Portal de Pedidos, Notas e Boletos")
     if user["is_admin"]:
         st.info("Use o menu lateral para gerenciar condomínios, vínculos e usuários.")
     else:
@@ -68,14 +64,15 @@ paginas_cliente = [
     st.Page("pages/5_📦_Meus Pedidos.py", title="Meus Pedidos", icon="📦"),
 ]
 
-st.sidebar.image("assets/pcy-logo.png", width=180)
+st.sidebar.image("assets/pcy-logo.png", use_container_width=True)
 st.sidebar.divider()
-
-with st.sidebar:
-    st.write(user["nome_completo"])
-    st.write("👑 Admin" if user["is_admin"] else "👤 Cliente")
-    if st.button("Logout"):
-        auth.logout()
 
 pg = st.navigation(paginas_admin if user["is_admin"] else paginas_cliente)
 pg.run()
+
+st.sidebar.divider()
+st.sidebar.write(user["nome_completo"])
+badge_texto = "👑 Admin" if user["is_admin"] else "👤 Cliente"
+st.sidebar.caption(badge_texto)
+if st.sidebar.button("Sair da conta", use_container_width=True):
+    auth.logout()
