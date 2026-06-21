@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import date, timedelta
 
 import streamlit as st
 
@@ -329,15 +329,66 @@ except RuntimeError as e:
     condominios = []
 
 opcoes_filtro = {"Todos": None} | {c["nome"]: c["id"] for c in condominios}
-filtro_nome = st.selectbox("Filtrar por condomínio", list(opcoes_filtro.keys()))
+
+st.session_state.setdefault("adm_filtro_status_pgto", "Todos")
+st.session_state.setdefault("adm_filtro_status_entrega", "Todos")
+st.session_state.setdefault("adm_filtro_docs", [])
+st.session_state.setdefault("adm_filtro_vencimento", "Todos")
+st.session_state.setdefault("adm_filtro_data_inicio", None)
+st.session_state.setdefault("adm_filtro_data_fim", None)
+
+col_busca, col_filtros, col_novo = st.columns([3, 1, 1])
+
+with col_busca:
+    filtro_nome = st.selectbox("Filtrar por condomínio", list(opcoes_filtro.keys()))
 filtro_id = opcoes_filtro[filtro_nome]
 
-if st.button("+ Novo pedido"):
-    if not condominios:
-        st.error("Cadastre um condomínio antes de criar pedidos.")
-    else:
-        _limpar_itens_form("itens_form_novo")
-        dialog_novo_pedido(condominios)
+with col_filtros:
+    with st.popover("🔍 Filtros", use_container_width=True):
+        st.selectbox(
+            "Pagamento",
+            ["Todos", "pendente", "pago", "cancelado"],
+            key="adm_filtro_status_pgto",
+        )
+        st.selectbox(
+            "Entrega",
+            ["Todos", "pendente", "parcial", "entregue"],
+            key="adm_filtro_status_entrega",
+        )
+        st.multiselect(
+            "Documentos",
+            ["📄 Sem nota fiscal", "🧾 Sem boleto"],
+            key="adm_filtro_docs",
+        )
+        st.selectbox(
+            "Vencimento",
+            ["Todos", "⚠️ Vencidos", "⏰ Vencendo em 7 dias", "📅 Período personalizado"],
+            key="adm_filtro_vencimento",
+        )
+        if st.session_state["adm_filtro_vencimento"] == "📅 Período personalizado":
+            col_de, col_ate = st.columns(2)
+            col_de.date_input("De", key="adm_filtro_data_inicio", value=None)
+            col_ate.date_input("Até", key="adm_filtro_data_fim", value=None)
+
+        col_aplicar, col_limpar = st.columns(2)
+        if col_aplicar.button("Aplicar", type="primary", use_container_width=True):
+            st.rerun()
+        if col_limpar.button("Limpar", use_container_width=True):
+            for chave in [
+                "adm_filtro_status_pgto", "adm_filtro_status_entrega",
+                "adm_filtro_docs", "adm_filtro_vencimento",
+                "adm_filtro_data_inicio", "adm_filtro_data_fim",
+            ]:
+                st.session_state.pop(chave, None)
+            st.rerun()
+
+with col_novo:
+    if st.button("+ Novo pedido"):
+        if not condominios:
+            st.error("Cadastre um condomínio antes de criar pedidos.")
+        else:
+            _limpar_itens_form("itens_form_novo")
+            dialog_novo_pedido(condominios)
 
 try:
     pedidos = queries.listar_pedidos(filtro_id)
@@ -345,6 +396,65 @@ except Exception as e:
     print(f"[pedidos] listar_pedidos :: {type(e).__name__}: {e}")
     st.error("Não foi possível carregar os pedidos. Tente novamente.")
     pedidos = []
+
+if st.session_state["adm_filtro_status_pgto"] != "Todos":
+    pedidos = [
+        p for p in pedidos
+        if p.get("status_pagamento") == st.session_state["adm_filtro_status_pgto"]
+    ]
+
+if st.session_state["adm_filtro_status_entrega"] != "Todos":
+    pedidos = [
+        p for p in pedidos
+        if p.get("status_entrega") == st.session_state["adm_filtro_status_entrega"]
+    ]
+
+if "📄 Sem nota fiscal" in st.session_state["adm_filtro_docs"]:
+    pedidos = [p for p in pedidos if not p.get("nota_fiscal_path")]
+if "🧾 Sem boleto" in st.session_state["adm_filtro_docs"]:
+    pedidos = [p for p in pedidos if not p.get("boleto_path")]
+
+filtro_venc = st.session_state["adm_filtro_vencimento"]
+hoje = date.today()
+if filtro_venc == "⚠️ Vencidos":
+    pedidos = [
+        p for p in pedidos
+        if p.get("data_vencimento")
+        and date.fromisoformat(p["data_vencimento"]) < hoje
+        and p.get("status_pagamento") == "pendente"
+    ]
+elif filtro_venc == "⏰ Vencendo em 7 dias":
+    limite = hoje + timedelta(days=7)
+    pedidos = [
+        p for p in pedidos
+        if p.get("data_vencimento")
+        and hoje <= date.fromisoformat(p["data_vencimento"]) <= limite
+        and p.get("status_pagamento") == "pendente"
+    ]
+elif filtro_venc == "📅 Período personalizado":
+    inicio = st.session_state.get("adm_filtro_data_inicio")
+    fim = st.session_state.get("adm_filtro_data_fim")
+    if inicio:
+        pedidos = [
+            p for p in pedidos
+            if p.get("data_vencimento")
+            and date.fromisoformat(p["data_vencimento"]) >= inicio
+        ]
+    if fim:
+        pedidos = [
+            p for p in pedidos
+            if p.get("data_vencimento")
+            and date.fromisoformat(p["data_vencimento"]) <= fim
+        ]
+
+filtros_ativos = (
+    st.session_state["adm_filtro_status_pgto"] != "Todos"
+    or st.session_state["adm_filtro_status_entrega"] != "Todos"
+    or st.session_state["adm_filtro_docs"]
+    or st.session_state["adm_filtro_vencimento"] != "Todos"
+)
+if filtros_ativos:
+    st.caption(f"🔍 {len(pedidos)} pedido(s) encontrado(s) com os filtros aplicados")
 
 if not pedidos:
     st.info("Nenhum pedido encontrado.")
