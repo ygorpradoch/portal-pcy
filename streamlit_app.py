@@ -7,10 +7,15 @@ from lib.supabase_client import set_session_from_state
 
 st.set_page_config(page_title="Portal PCY", page_icon="📦")
 
-get_cookie_manager()  # garante que o componente já está montado no DOM
+get_cookie_manager()  # monta o componente de cookie no DOM
+
+# Aplica escrita/remoção de cookie adiada por login()/logout(). Precisa rodar
+# no topo, num run que segue renderizando a app, para o iframe persistir.
+fez_logout = auth.aplicar_cookie_pendente()
 
 set_session_from_state()
-auth.restaurar_sessao_do_cookie()
+if not fez_logout:
+    auth.restaurar_sessao_do_cookie()
 
 user = auth.get_current_user()
 

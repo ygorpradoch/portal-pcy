@@ -1,6 +1,5 @@
 """Autenticacao e gerenciamento de sessao de usuario."""
 
-import time
 from datetime import datetime, timedelta, timezone
 
 import streamlit as st
@@ -26,11 +25,31 @@ def _salvar_cookie_refresh_token(refresh_token: str) -> None:
         secure=True,
         same_site="lax",
     )
-    # O componente precisa de um round-trip real (iframe -> JS -> document.cookie)
-    # para persistir a escrita no browser. Sem essa pausa, um st.rerun() logo
-    # em seguida (ex.: apos login()) substitui a arvore de elementos antes do
-    # iframe terminar de montar, e o cookie nunca chega a ser escrito de fato.
-    time.sleep(0.3)
+
+
+def aplicar_cookie_pendente() -> bool:
+    """Aplica no topo do script as operacoes de cookie adiadas por
+    login()/logout().
+
+    Por que adiar: o componente de cookie (extra-streamlit-components) so
+    grava/apaga o cookie no browser quando seu iframe e renderizado e
+    PERMANECE montado no DOM ate completar o round-trip. login()/logout()
+    chamam st.rerun() logo em seguida; se a operacao de cookie fosse feita
+    ali, o rerun desmontaria o iframe antes dele rodar e o cookie nunca
+    seria persistido. Chamando aqui no topo, o script segue e renderiza a
+    app inteira sem rerun imediato, dando tempo do iframe concluir.
+
+    Retorna True se um logout (remocao) foi processado, para o chamador
+    pular a restauracao da sessao neste run (senao ele releria o cookie
+    ainda-nao-apagado e re-logaria)."""
+    if st.session_state.pop("pending_cookie_delete", False):
+        get_cookie_manager().delete(NOME_COOKIE, key="delete_pcy_refresh_token")
+        return True
+
+    token = st.session_state.pop("pending_cookie_save", None)
+    if token:
+        _salvar_cookie_refresh_token(token)
+    return False
 
 
 def login(email: str, senha: str) -> tuple[bool, str | None]:
@@ -45,12 +64,10 @@ def login(email: str, senha: str) -> tuple[bool, str | None]:
     st.session_state["access_token"] = response.session.access_token
     st.session_state["refresh_token"] = response.session.refresh_token
     st.session_state["user"] = response.user
-    _salvar_cookie_refresh_token(response.session.refresh_token)
-    # DEBUG TEMPORÁRIO — remover após diagnóstico
-    st.write(
-        f"[DEBUG] Cookie salvo: pcy_refresh_token = "
-        f"{repr(response.session.refresh_token[:20])}..."
-    )
+    # Adia a gravacao do cookie para o topo do proximo run (ver
+    # aplicar_cookie_pendente). Gravar aqui nao persiste: o st.rerun() do
+    # login_form desmonta o iframe do componente antes dele escrever.
+    st.session_state["pending_cookie_save"] = response.session.refresh_token
     return True, None
 
 
@@ -58,27 +75,20 @@ def logout() -> None:
     get_supabase_client().auth.sign_out()
     for chave in ("access_token", "refresh_token", "user", "perfil"):
         st.session_state.pop(chave, None)
-    get_cookie_manager().delete(NOME_COOKIE, key="delete_pcy_refresh_token")
-    # Mesma razao do sleep em _salvar_cookie_refresh_token: dar tempo do
-    # componente remover o cookie no browser antes do rerun substituir a
-    # arvore de elementos.
-    time.sleep(0.3)
+    # Adia a remocao do cookie para o topo do proximo run, pela mesma razao
+    # do login: senao o st.rerun() abaixo desmonta o iframe antes de apagar.
+    st.session_state["pending_cookie_delete"] = True
     st.rerun()
 
 
 def restaurar_sessao_do_cookie() -> None:
-    """Restaura a sessao a partir do refresh_token salvo em cookie, se a
-    sessao em memoria (session_state) estiver vazia — caso de F5 ou nova
-    aba. Sem cookie ou com cookie invalido, segue para a tela de login.
+    """Restaura a sessao a partir do refresh_token salvo em cookie quando a
+    sessao em memoria (session_state) esta vazia — caso de F5 ou nova aba.
 
-    IMPORTANTE: usa get_all(), não get(). get() só le o dict self.cookies
-    que o CookieManager populou da ultima vez que get_all()/__init__ rodou
-    — como o CookieManager e um singleton em session_state, __init__ só
-    executa uma vez por sessao de browser, e nessa primeira execucao o
-    round-trip do browser ainda nao voltou. Chamar get_all() com a mesma
-    key em todo run mantem essa chamada "viva" para o componente poder
-    entregar o valor real (via rerun automatico da propria lib) quando o
-    browser responder."""
+    Usa get_all() (nao get()): get() so le o dict interno do CookieManager,
+    populado uma unica vez no __init__; get_all() reconsulta o componente a
+    cada run, deixando o browser entregar os cookies reais (via rerun
+    automatico da lib) quando o round-trip completa."""
     if st.session_state.get("refresh_token"):
         return
 
@@ -86,20 +96,17 @@ def restaurar_sessao_do_cookie() -> None:
     cookies = cm.get_all(key="get_all_cookies")
     refresh_token = cookies.get(NOME_COOKIE) if cookies else None
 
-    # DEBUG TEMPORÁRIO — remover após diagnóstico
-    st.write(f"[DEBUG] cookies retornados por get_all(): {repr(cookies)}")
-    st.write(f"[DEBUG] refresh_token do cookie: {repr(refresh_token)}")
+    # DEBUG TEMPORÁRIO — remover após confirmar a persistência
+    st.write(f"[DEBUG] cookies do browser: {repr(cookies)}")
+    st.write(f"[DEBUG] pcy_refresh_token: {repr(refresh_token)}")
 
     if not refresh_token:
-        st.write("[DEBUG] Cookie vazio ou não encontrado — abortando restauração")
         return
 
-    st.write("[DEBUG] Tentando refresh_session com o token do cookie...")
     try:
         response = get_supabase_client().auth.refresh_session(refresh_token)
-        st.write(f"[DEBUG] refresh_session retornou: {repr(response)}")
     except Exception as e:
-        st.write(f"[DEBUG] refresh_session lançou exceção: {repr(e)}")
+        st.write(f"[DEBUG] refresh_session falhou: {repr(e)}")
         cm.delete(NOME_COOKIE, key="delete_pcy_refresh_token")
         return
 
@@ -107,9 +114,9 @@ def restaurar_sessao_do_cookie() -> None:
     st.session_state["refresh_token"] = response.session.refresh_token
     st.session_state["user"] = response.user
     set_session_from_state()
-    # Supabase rotaciona o refresh token a cada refresh_session(); regrava
-    # o cookie com o valor novo, senao o proximo F5 usaria um token ja
-    # invalidado.
+    # Supabase rotaciona o refresh token a cada refresh_session(); regrava o
+    # cookie com o valor novo para o proximo F5 nao usar um token invalido.
+    # (set() aqui persiste porque o script segue renderizando a app.)
     _salvar_cookie_refresh_token(response.session.refresh_token)
 
 
