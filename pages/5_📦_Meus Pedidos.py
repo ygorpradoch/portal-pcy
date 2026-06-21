@@ -359,5 +359,19 @@ else:
     if not pedidos:
         st.info("Nenhum pedido encontrado para os filtros selecionados.")
 
-    for pedido in pedidos:
-        _render_card_pedido(pedido)
+    grupos = defaultdict(list)
+    for p in pedidos:
+        mes_key = p["data_pedido"][:7]
+        grupos[mes_key].append(p)
+
+    for mes_key in sorted(grupos.keys(), reverse=True):
+        ano, mes_num = mes_key.split("-")
+        label = f"{MESES_PT[mes_num]} {ano}"
+        st.markdown(
+            f"<h3 style='text-align:center; color:#6c757d; "
+            f"margin: 1.5rem 0 0.5rem;'>{label}</h3>",
+            unsafe_allow_html=True,
+        )
+        st.divider()
+        for pedido in grupos[mes_key]:
+            _render_card_pedido(pedido, mostrar_condominio=False)
