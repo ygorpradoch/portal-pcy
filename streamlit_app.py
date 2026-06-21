@@ -18,9 +18,9 @@ st.markdown("""
 #MainMenu {display: none !important;}
 footer {display: none !important;}
 header {background: none !important; box-shadow: none !important;}
-header [data-testid="stToolbar"] {display: none !important;}
 header [data-testid="stDecoration"] {display: none !important;}
 header [data-testid="stHeader"] {background: none !important;}
+header [data-testid="stMainMenuButton"] {display: none !important;}
 [data-testid="manage-app-button"] {display: none !important;}
 [data-testid="stToolbarActions"] {display: none !important;}
 [data-testid="stStatusWidget"] {display: none !important;}

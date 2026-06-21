@@ -470,30 +470,46 @@ if pedidos:
     h[4].caption("Status Pgto")
     h[5].caption("Data Pedido")
 
-for p in pedidos:
-    cols = st.columns([1.5, 2, 1.5, 1.5, 1.5, 1.5, 1, 1])
-    cols[0].write(p.get("numero_pedido") or "—")
-    cols[1].write(p.get("condominio_nome") or "—")
-    cols[2].write(f"R$ {p['valor_total']:.2f}")
-    cols[3].write(p["status_entrega"])
-    cols[4].write(p["status_pagamento"])
-    cols[5].write(p.get("data_pedido") or "—")
+if pedidos:
+    st.markdown(
+        """
+        <style>
+        div[class*="st-key-pedido_row_par_"] {
+            background-color: #f8f9fa;
+            border-radius: 6px;
+            padding: 4px 8px;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    if cols[6].button("✏️", key=f"editar_{p['id']}"):
-        _limpar_itens_form(f"itens_form_editar_{p['id']}")
-        dialog_editar_pedido(p, condominios)
+for i, p in enumerate(pedidos):
+    paridade = "par" if i % 2 == 0 else "impar"
+    with st.container(key=f"pedido_row_{paridade}_{p['id']}"):
+        cols = st.columns([1.5, 2, 1.5, 1.5, 1.5, 1.5, 1, 1])
+        cols[0].write(p.get("numero_pedido") or "—")
+        cols[1].write(p.get("condominio_nome") or "—")
+        cols[2].write(f"R$ {p['valor_total']:.2f}")
+        cols[3].write(p["status_entrega"])
+        cols[4].write(p["status_pagamento"])
+        cols[5].write(p.get("data_pedido") or "—")
 
-    flag = f"confirmar_del_pedido_{p['id']}"
-    if st.session_state.get(flag):
-        if cols[7].button("Confirmar?", key=f"conf_del_{p['id']}"):
-            try:
-                queries.deletar_pedido(p["id"])
-                st.session_state.pop(flag, None)
-                st.success("Pedido deletado.")
+        if cols[6].button("✏️", key=f"editar_{p['id']}"):
+            _limpar_itens_form(f"itens_form_editar_{p['id']}")
+            dialog_editar_pedido(p, condominios)
+
+        flag = f"confirmar_del_pedido_{p['id']}"
+        if st.session_state.get(flag):
+            if cols[7].button("Confirmar?", key=f"conf_del_{p['id']}"):
+                try:
+                    queries.deletar_pedido(p["id"])
+                    st.session_state.pop(flag, None)
+                    st.success("Pedido deletado.")
+                    st.rerun()
+                except RuntimeError as e:
+                    st.error(str(e))
+        else:
+            if cols[7].button("🗑️", key=f"del_{p['id']}"):
+                st.session_state[flag] = True
                 st.rerun()
-            except RuntimeError as e:
-                st.error(str(e))
-    else:
-        if cols[7].button("🗑️", key=f"del_{p['id']}"):
-            st.session_state[flag] = True
-            st.rerun()
