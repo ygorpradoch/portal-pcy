@@ -64,6 +64,14 @@ def _baixar_documento(label: str, path: str) -> None:
         st.error(str(e))
 
 
+def _html(template: str) -> str:
+    """Remove indentação e linhas vazias para o Markdown não confundir
+    o HTML com um bloco de código (CommonMark trata linha em branco como
+    fim de bloco HTML, e indentação residual cai na regra de code block)."""
+    linhas = dedent(template).strip().splitlines()
+    return "\n".join(linha for linha in linhas if linha.strip())
+
+
 COR_BG_PAR = "#F0F2F6"
 COR_BG_IMPAR = "#FFFFFF"
 COR_TEXT_PRIMARIA = "#262730"
@@ -248,7 +256,7 @@ def _render_linha_pedido(pedido: dict, i: int, mostrar_condominio: bool = False)
             f'{pedido.get("condominio_nome", "")}</span>'
         )
 
-    html = dedent(f"""
+    html = _html(f"""
         <div style="border-left:3px solid {cor_borda};
                     padding:10px 14px;background:{bg};
                     border-bottom:0.5px solid {COR_BORDA_SEPARADOR};">
@@ -277,7 +285,7 @@ def _render_linha_pedido(pedido: dict, i: int, mostrar_condominio: bool = False)
             </div>
           </div>
         </div>
-    """).strip()
+    """)
     st.markdown(html, unsafe_allow_html=True)
 
     if st.button(" ", key=f"btn_detalhe_{pedido['id']}"):
@@ -285,7 +293,7 @@ def _render_linha_pedido(pedido: dict, i: int, mostrar_condominio: bool = False)
 
 
 def _render_pedidos_agrupados(pedidos: list[dict], mostrar_condominio: bool = False) -> None:
-    """Agrupa pedidos por mês e renderiza cada grupo num container com borda."""
+    """Agrupa pedidos por mês numa lista contínua, com um divisor por mês."""
     if not pedidos:
         st.info("Nenhum pedido encontrado para os filtros selecionados.")
         return
@@ -297,18 +305,17 @@ def _render_pedidos_agrupados(pedidos: list[dict], mostrar_condominio: bool = Fa
     for mes_key in sorted(grupos.keys(), reverse=True):
         ano, mes_num = mes_key.split("-")
         label = f"{MESES_PT[mes_num]} {ano}"
-        with st.container(border=True):
-            html = dedent(f"""
-                <div style="display:flex;align-items:center;gap:10px;padding:14px 16px;">
-                  <div style="height:1px;flex:1;background:{COR_BORDA_SEPARADOR};"></div>
-                  <span style="font-size:18px;font-weight:500;color:{COR_TEXT_SECUNDARIA};
-                               white-space:nowrap;padding:0 14px;">{label}</span>
-                  <div style="height:1px;flex:1;background:{COR_BORDA_SEPARADOR};"></div>
-                </div>
-            """).strip()
-            st.markdown(html, unsafe_allow_html=True)
-            for i, pedido in enumerate(grupos[mes_key]):
-                _render_linha_pedido(pedido, i, mostrar_condominio)
+        html = _html(f"""
+            <div style="display:flex;align-items:center;gap:10px;padding:14px 16px;">
+              <div style="height:1px;flex:1;background:{COR_BORDA_SEPARADOR};"></div>
+              <span style="font-size:18px;font-weight:500;color:{COR_TEXT_SECUNDARIA};
+                           white-space:nowrap;padding:0 14px;">{label}</span>
+              <div style="height:1px;flex:1;background:{COR_BORDA_SEPARADOR};"></div>
+            </div>
+        """)
+        st.markdown(html, unsafe_allow_html=True)
+        for i, pedido in enumerate(grupos[mes_key]):
+            _render_linha_pedido(pedido, i, mostrar_condominio)
 
 
 # --- Seleção de condomínio ---
