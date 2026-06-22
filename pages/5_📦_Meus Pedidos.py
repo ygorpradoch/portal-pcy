@@ -82,46 +82,99 @@ def _badge_vencimento(pedido: dict) -> str | None:
     return None
 
 
-def _legenda_data(pedido: dict) -> str:
-    legenda = f"Pedido em {_formatar_data(pedido.get('data_pedido'))}"
-    if pedido["status_pagamento"] == "pendente" and pedido.get("data_vencimento"):
-        legenda += f" · vence {_formatar_data(pedido['data_vencimento'])}"
-    elif pedido.get("data_entrega"):
-        legenda += f" · entregue {_formatar_data(pedido['data_entrega'])}"
-    return legenda
+COR_BG_PAR = "#F0F2F6"
+COR_BG_IMPAR = "#FFFFFF"
+COR_TEXT_PRIMARIA = "#262730"
+COR_TEXT_SECUNDARIA = "#6c757d"
+COR_TEXT_TERCIARIA = "#adb5bd"
+COR_BORDA_SEPARADOR = "#dee2e6"
+COR_URGENTE = "#dc3545"
+COR_BORDA_STATUS = {
+    "pendente": "#f0ad4e",
+    "pago": "#28a745",
+}
 
 
-def _render_card_pedido(pedido: dict, mostrar_condominio: bool = False) -> None:
-    """Renderiza um card de pedido dentro de st.container(border=True)."""
-    with st.container(border=True):
-        col_info, col_valor = st.columns([3, 2])
-        with col_info:
-            st.markdown(f"**{pedido.get('numero_pedido') or '—'}**")
-            if mostrar_condominio:
-                st.caption(pedido.get("condominio_nome", ""))
-            st.caption(_legenda_data(pedido))
-        with col_valor:
-            st.markdown(
-                f"<div style='text-align:right;font-size:1.5em;font-weight:700'>"
-                f"{_moeda(pedido['valor_total'])}</div>",
-                unsafe_allow_html=True,
-            )
+def _vencimento_html(pedido: dict) -> str:
+    """Texto de vencimento/pagamento exibido na coluna de valor da linha."""
+    if pedido["status_pagamento"] == "pago":
+        return (
+            f"<div style='font-size:11px;color:{COR_TEXT_TERCIARIA};'>pago</div>"
+        )
+    if pedido["status_pagamento"] != "pendente":
+        return ""
+    venc = pedido.get("data_vencimento")
+    if not venc:
+        return ""
+    urgente = _badge_vencimento(pedido) is not None
+    cor = COR_URGENTE if urgente else COR_TEXT_TERCIARIA
+    texto = f"vence {_formatar_data(venc)}"
+    return f"<div style='font-size:11px;color:{cor};'>{texto}</div>"
 
-        badges = [
-            _badge(*BADGES_PAGAMENTO.get(
-                pedido["status_pagamento"],
-                (pedido["status_pagamento"], "#6c757d"),
-            )),
-            _badge(*BADGES_ENTREGA.get(
-                pedido["status_entrega"],
-                (pedido["status_entrega"], "#6c757d"),
-            )),
-        ]
-        venc = _badge_vencimento(pedido)
-        if venc:
-            badges.append(venc)
-        st.markdown(" ".join(badges), unsafe_allow_html=True)
 
+def _render_linha_pedido(pedido: dict, i: int, mostrar_condominio: bool = False) -> None:
+    """Renderiza uma linha compacta de pedido dentro do container do mês."""
+    cor_borda = COR_BORDA_STATUS.get(pedido["status_pagamento"], "#6c757d")
+    bg = COR_BG_PAR if i % 2 == 0 else COR_BG_IMPAR
+
+    badges = [
+        _badge(*BADGES_PAGAMENTO.get(
+            pedido["status_pagamento"],
+            (pedido["status_pagamento"], "#6c757d"),
+        )),
+        _badge(*BADGES_ENTREGA.get(
+            pedido["status_entrega"],
+            (pedido["status_entrega"], "#6c757d"),
+        )),
+    ]
+    venc = _badge_vencimento(pedido)
+    if venc:
+        badges.append(venc)
+
+    condominio_html = (
+        f"<span style='font-size:12px; color:{COR_TEXT_SECUNDARIA};'>"
+        f"{pedido.get('condominio_nome', '')}</span>"
+        if mostrar_condominio
+        else ""
+    )
+
+    col_info, col_valor = st.columns([3, 2])
+    with col_info:
+        st.markdown(
+            f"""
+            <div style="border-left: 3px solid {cor_borda};
+                        padding: 10px 12px;
+                        background: {bg};">
+              <div style="display:flex; align-items:baseline;
+                          gap:6px; margin-bottom:4px; flex-wrap:wrap;">
+                <span style="font-size:12px; color:{COR_TEXT_TERCIARIA};">
+                  {_formatar_data(pedido['data_pedido'])[:-5]}
+                </span>
+                <span style="font-size:13px; font-weight:500; color:{COR_TEXT_PRIMARIA};">
+                  {pedido.get('numero_pedido') or '—'}
+                </span>
+                {condominio_html}
+              </div>
+              {" ".join(badges)}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with col_valor:
+        st.markdown(
+            f"""
+            <div style="background:{bg}; padding:10px 12px; text-align:right;">
+              <div style="font-size:13px; font-weight:500;
+                          color:{COR_TEXT_PRIMARIA}; margin-bottom:2px;">
+                {_moeda(pedido['valor_total'])}
+              </div>
+              {_vencimento_html(pedido)}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with st.expander("Ver itens e documentos", expanded=False):
         if pedido["status_pagamento"] == "pendente":
             chave_flag = f"confirmar_pagamento_{pedido['id']}"
             if not st.session_state.get(chave_flag):
@@ -150,53 +203,81 @@ def _render_card_pedido(pedido: dict, mostrar_condominio: bool = False) -> None:
                         st.session_state.pop(chave_flag, None)
                         st.rerun()
 
-        with st.expander("Ver itens e documentos", expanded=False):
-            st.subheader("Itens do pedido")
-            try:
-                itens = queries.listar_itens_pedido(pedido["id"])
-            except RuntimeError as e:
-                st.error(str(e))
-                itens = []
+        st.subheader("Itens do pedido")
+        try:
+            itens = queries.listar_itens_pedido(pedido["id"])
+        except RuntimeError as e:
+            st.error(str(e))
+            itens = []
 
-            if itens:
-                tabela = [
-                    {
-                        "Produto": item["produto"],
-                        "Quantidade": item["quantidade"],
-                        "Valor Unit.": _moeda(item["valor_unit"]),
-                        "Total Item": _moeda(item["valor_total_item"]),
-                    }
-                    for item in itens
-                ]
-                st.dataframe(tabela, hide_index=True, use_container_width=True)
-            else:
-                st.caption("Nenhum item cadastrado.")
-            st.write(f"**Total do pedido:** {_moeda(pedido['valor_total'])}")
+        if itens:
+            tabela = [
+                {
+                    "Produto": item["produto"],
+                    "Quantidade": item["quantidade"],
+                    "Valor Unit.": _moeda(item["valor_unit"]),
+                    "Total Item": _moeda(item["valor_total_item"]),
+                }
+                for item in itens
+            ]
+            st.dataframe(tabela, hide_index=True, use_container_width=True)
+        else:
+            st.caption("Nenhum item cadastrado.")
+        st.write(f"**Total do pedido:** {_moeda(pedido['valor_total'])}")
 
-            st.subheader("Datas")
-            st.write(f"**Data do pedido:** {_formatar_data(pedido.get('data_pedido'))}")
+        st.subheader("Datas")
+        st.write(f"**Data do pedido:** {_formatar_data(pedido.get('data_pedido'))}")
+        st.write(
+            f"**Data de vencimento:** {_formatar_data(pedido.get('data_vencimento'))}"
+        )
+        if pedido.get("data_entrega"):
             st.write(
-                f"**Data de vencimento:** {_formatar_data(pedido.get('data_vencimento'))}"
+                f"**Data de entrega:** {_formatar_data(pedido['data_entrega'])}"
             )
-            if pedido.get("data_entrega"):
-                st.write(
-                    f"**Data de entrega:** {_formatar_data(pedido['data_entrega'])}"
-                )
 
-            st.subheader("Documentos")
-            tem_documento = False
-            if pedido.get("nota_fiscal_path"):
-                tem_documento = True
-                _baixar_documento("⬇️ Baixar Nota Fiscal", pedido["nota_fiscal_path"])
-            if pedido.get("boleto_path"):
-                tem_documento = True
-                _baixar_documento("⬇️ Baixar Boleto", pedido["boleto_path"])
-            if pedido.get("linha_digitavel"):
-                tem_documento = True
-                st.code(pedido["linha_digitavel"])
-                st.caption("Copie a linha digitável para pagar o boleto")
-            if not tem_documento:
-                st.caption("Documentos não disponíveis ainda.")
+        st.subheader("Documentos")
+        tem_documento = False
+        if pedido.get("nota_fiscal_path"):
+            tem_documento = True
+            _baixar_documento("⬇️ Baixar Nota Fiscal", pedido["nota_fiscal_path"])
+        if pedido.get("boleto_path"):
+            tem_documento = True
+            _baixar_documento("⬇️ Baixar Boleto", pedido["boleto_path"])
+        if pedido.get("linha_digitavel"):
+            tem_documento = True
+            st.code(pedido["linha_digitavel"])
+            st.caption("Copie a linha digitável para pagar o boleto")
+        if not tem_documento:
+            st.caption("Documentos não disponíveis ainda.")
+
+
+def _render_pedidos_agrupados(pedidos: list[dict], mostrar_condominio: bool = False) -> None:
+    """Agrupa pedidos por mês e renderiza cada grupo num container com borda."""
+    grupos = defaultdict(list)
+    for p in pedidos:
+        grupos[p["data_pedido"][:7]].append(p)
+
+    for mes_key in sorted(grupos.keys(), reverse=True):
+        ano, mes_num = mes_key.split("-")
+        label = f"{MESES_PT[mes_num]} {ano}"
+        with st.container(border=True):
+            st.markdown(
+                f"""
+                <div style="display:flex; align-items:center; gap:10px;
+                            padding: 6px 0; margin-bottom: 4px;">
+                  <div style="height:1px; flex:1; background:{COR_BORDA_SEPARADOR};"></div>
+                  <span style="font-size:12px; font-weight:500;
+                               color:{COR_TEXT_SECUNDARIA};
+                               white-space:nowrap; padding:0 8px;">
+                    {label}
+                  </span>
+                  <div style="height:1px; flex:1; background:{COR_BORDA_SEPARADOR};"></div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            for i, pedido in enumerate(grupos[mes_key]):
+                _render_linha_pedido(pedido, i, mostrar_condominio)
 
 
 # --- Seleção de condomínio ---
@@ -326,22 +407,7 @@ if condominio_id is None:
     if not pedidos:
         st.info("Nenhum pedido encontrado para os filtros selecionados.")
 
-    grupos = defaultdict(list)
-    for p in pedidos:
-        mes_key = p["data_pedido"][:7]
-        grupos[mes_key].append(p)
-
-    for mes_key in sorted(grupos.keys(), reverse=True):
-        ano, mes_num = mes_key.split("-")
-        label = f"{MESES_PT[mes_num]} {ano}"
-        st.markdown(
-            f"<h3 style='text-align:center; color:#6c757d; "
-            f"margin: 1.5rem 0 0.5rem;'>{label}</h3>",
-            unsafe_allow_html=True,
-        )
-        st.divider()
-        for pedido in grupos[mes_key]:
-            _render_card_pedido(pedido, mostrar_condominio=True)
+    _render_pedidos_agrupados(pedidos, mostrar_condominio=True)
 else:
     try:
         pedidos = queries.listar_pedidos_do_cliente(
@@ -359,19 +425,4 @@ else:
     if not pedidos:
         st.info("Nenhum pedido encontrado para os filtros selecionados.")
 
-    grupos = defaultdict(list)
-    for p in pedidos:
-        mes_key = p["data_pedido"][:7]
-        grupos[mes_key].append(p)
-
-    for mes_key in sorted(grupos.keys(), reverse=True):
-        ano, mes_num = mes_key.split("-")
-        label = f"{MESES_PT[mes_num]} {ano}"
-        st.markdown(
-            f"<h3 style='text-align:center; color:#6c757d; "
-            f"margin: 1.5rem 0 0.5rem;'>{label}</h3>",
-            unsafe_allow_html=True,
-        )
-        st.divider()
-        for pedido in grupos[mes_key]:
-            _render_card_pedido(pedido, mostrar_condominio=False)
+    _render_pedidos_agrupados(pedidos, mostrar_condominio=False)
