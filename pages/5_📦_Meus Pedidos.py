@@ -275,7 +275,7 @@ def _render_linha_pedido(pedido: dict, i: int, mostrar_condominio: bool = False)
 
     html = _html(f"""
         <div style="border-left:3px solid {cor_borda};
-                    padding:10px 14px;background:{bg};
+                    padding:10px 14px 32px 14px;background:{bg};
                     border-bottom:0.5px solid {COR_BORDA_SEPARADOR};">
           <div style="display:flex;justify-content:space-between;
                       align-items:center;gap:8px;">
@@ -472,4 +472,4 @@ else:
         st.error(str(e))
         pedidos = []
 
-    _render_pedidos_agrupados(pedidos, mostrar_condominio=False)
+    _render_pedidos_agrupados(pedidos, mostrar_condominio=True)
