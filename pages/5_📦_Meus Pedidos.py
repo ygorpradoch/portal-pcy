@@ -15,10 +15,15 @@ st.title("📦 Meus Pedidos")
 st.markdown(
     dedent("""
         <style>
-        div[class*="st-key-btn_detalhe_"] {
-            display: flex !important;
-            justify-content: flex-end !important;
-            margin-top: -2.3rem !important;
+        div[class*="st-key-linha_pedido_"] {
+            position: relative !important;
+        }
+        div[class*="st-key-linha_pedido_"] div[class*="st-key-btn_detalhe_"] {
+            position: absolute !important;
+            bottom: 8px !important;
+            right: 14px !important;
+            width: auto !important;
+            margin: 0 !important;
         }
         div[class*="st-key-btn_detalhe_"] button {
             background: #ffffff !important;
@@ -295,10 +300,10 @@ def _render_linha_pedido(pedido: dict, i: int, mostrar_condominio: bool = False)
           </div>
         </div>
     """)
-    st.markdown(html, unsafe_allow_html=True)
-
-    if st.button("Ver detalhes ›", key=f"btn_detalhe_{pedido['id']}"):
-        _dialog_detalhes(pedido)
+    with st.container(key=f"linha_pedido_{pedido['id']}"):
+        st.markdown(html, unsafe_allow_html=True)
+        if st.button("Ver detalhes ›", key=f"btn_detalhe_{pedido['id']}"):
+            _dialog_detalhes(pedido)
 
 
 def _render_pedidos_agrupados(pedidos: list[dict], mostrar_condominio: bool = False) -> None:
@@ -318,7 +323,7 @@ def _render_pedidos_agrupados(pedidos: list[dict], mostrar_condominio: bool = Fa
             html = _html(f"""
                 <div style="display:flex;align-items:center;gap:10px;padding:14px 16px;">
                   <div style="height:1px;flex:1;background:{COR_BORDA_SEPARADOR};"></div>
-                  <span style="font-size:18px !important;font-weight:500;color:{COR_TEXT_SECUNDARIA};
+                  <span style="font-size:20px !important;font-weight:500;color:{COR_TEXT_SECUNDARIA};
                                white-space:nowrap;padding:0 14px;">{label}</span>
                   <div style="height:1px;flex:1;background:{COR_BORDA_SEPARADOR};"></div>
                 </div>
