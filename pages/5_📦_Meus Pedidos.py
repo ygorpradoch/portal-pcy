@@ -15,12 +15,24 @@ st.title("📦 Meus Pedidos")
 st.markdown(
     dedent("""
         <style>
+        div[class*="st-key-btn_detalhe_"] {
+            display: flex !important;
+            justify-content: flex-end !important;
+            margin-top: -2.3rem !important;
+        }
         div[class*="st-key-btn_detalhe_"] button {
-            opacity: 0 !important;
-            margin-top: -2.1rem !important;
-            height: 2rem !important;
-            width: 100% !important;
+            background: #ffffff !important;
+            border: 0.5px solid #dee2e6 !important;
+            border-radius: 6px !important;
+            color: #6c757d !important;
+            font-size: 11px !important;
+            padding: 3px 10px !important;
+            width: auto !important;
+            height: auto !important;
             cursor: pointer !important;
+        }
+        div[class*="st-key-lista_pedidos"] [data-testid="stElementContainer"] {
+            margin-bottom: 0.4rem !important;
         }
         </style>
     """).strip(),
@@ -279,16 +291,13 @@ def _render_linha_pedido(pedido: dict, i: int, mostrar_condominio: bool = False)
               <span style="font-size:13px;font-weight:500;
                            color:{COR_TEXT_PRIMARIA};">{_moeda(pedido['valor_total'])}</span>
               {venc_html}
-              <span style="font-size:11px;color:{COR_TEXT_SECUNDARIA};
-                           border:0.5px solid {COR_BORDA_SEPARADOR};border-radius:6px;
-                           padding:3px 10px;">Ver detalhes ›</span>
             </div>
           </div>
         </div>
     """)
     st.markdown(html, unsafe_allow_html=True)
 
-    if st.button(" ", key=f"btn_detalhe_{pedido['id']}"):
+    if st.button("Ver detalhes ›", key=f"btn_detalhe_{pedido['id']}"):
         _dialog_detalhes(pedido)
 
 
@@ -302,20 +311,21 @@ def _render_pedidos_agrupados(pedidos: list[dict], mostrar_condominio: bool = Fa
     for p in pedidos:
         grupos[p["data_pedido"][:7]].append(p)
 
-    for mes_key in sorted(grupos.keys(), reverse=True):
-        ano, mes_num = mes_key.split("-")
-        label = f"{MESES_PT[mes_num]} {ano}"
-        html = _html(f"""
-            <div style="display:flex;align-items:center;gap:10px;padding:14px 16px;">
-              <div style="height:1px;flex:1;background:{COR_BORDA_SEPARADOR};"></div>
-              <span style="font-size:18px;font-weight:500;color:{COR_TEXT_SECUNDARIA};
-                           white-space:nowrap;padding:0 14px;">{label}</span>
-              <div style="height:1px;flex:1;background:{COR_BORDA_SEPARADOR};"></div>
-            </div>
-        """)
-        st.markdown(html, unsafe_allow_html=True)
-        for i, pedido in enumerate(grupos[mes_key]):
-            _render_linha_pedido(pedido, i, mostrar_condominio)
+    with st.container(key="lista_pedidos"):
+        for mes_key in sorted(grupos.keys(), reverse=True):
+            ano, mes_num = mes_key.split("-")
+            label = f"{MESES_PT[mes_num]} {ano}"
+            html = _html(f"""
+                <div style="display:flex;align-items:center;gap:10px;padding:14px 16px;">
+                  <div style="height:1px;flex:1;background:{COR_BORDA_SEPARADOR};"></div>
+                  <span style="font-size:18px !important;font-weight:500;color:{COR_TEXT_SECUNDARIA};
+                               white-space:nowrap;padding:0 14px;">{label}</span>
+                  <div style="height:1px;flex:1;background:{COR_BORDA_SEPARADOR};"></div>
+                </div>
+            """)
+            st.markdown(html, unsafe_allow_html=True)
+            for i, pedido in enumerate(grupos[mes_key]):
+                _render_linha_pedido(pedido, i, mostrar_condominio)
 
 
 # --- Seleção de condomínio ---
