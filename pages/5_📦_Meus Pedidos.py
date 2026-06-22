@@ -12,16 +12,6 @@ auth.require_auth()
 st.title("📦 Meus Pedidos")
 
 STATUS_PAGAMENTO_OPCOES = ["Todos", "pendente", "pago", "cancelado"]
-BADGES_PAGAMENTO = {
-    "pendente": ("🟡 Pendente", "#f0ad4e"),
-    "pago": ("🟢 Pago", "#28a745"),
-    "cancelado": ("🔴 Cancelado", "#dc3545"),
-}
-BADGES_ENTREGA = {
-    "pendente": ("⏳ Pendente", "#6c757d"),
-    "parcial": ("🔄 Parcial", "#17a2b8"),
-    "entregue": ("✅ Entregue", "#28a745"),
-}
 FILTROS_CHAVES = (
     "filtro_status",
     "filtro_data_inicio",
@@ -35,13 +25,6 @@ MESES_PT = {
     "07": "Julho", "08": "Agosto", "09": "Setembro",
     "10": "Outubro", "11": "Novembro", "12": "Dezembro",
 }
-
-
-def _badge(texto: str, cor: str) -> str:
-    return (
-        f"<span style='background-color:{cor};color:white;padding:2px 10px;"
-        f"border-radius:10px;font-size:0.85em;white-space:nowrap'>{texto}</span>"
-    )
 
 
 def _moeda(valor: float | None) -> str:
@@ -65,23 +48,6 @@ def _baixar_documento(label: str, path: str) -> None:
         st.error(str(e))
 
 
-def _badge_vencimento(pedido: dict) -> str | None:
-    """Badge de urgência de cobrança — só para pendentes com vencimento."""
-    if pedido["status_pagamento"] != "pendente":
-        return None
-    venc = pedido.get("data_vencimento")
-    if not venc:
-        return None
-    dias = (date.fromisoformat(venc) - date.today()).days
-    if dias < 0:
-        return _badge(f"⚠️ Vencido há {abs(dias)} dia(s)", "#dc3545")
-    if dias == 0:
-        return _badge("⚠️ Vence hoje", "#dc3545")
-    if dias <= 3:
-        return _badge(f"⏰ Vence em {dias} dia(s)", "#f0ad4e")
-    return None
-
-
 COR_BG_PAR = "#F0F2F6"
 COR_BG_IMPAR = "#FFFFFF"
 COR_TEXT_PRIMARIA = "#262730"
@@ -93,65 +59,203 @@ COR_BORDA_STATUS = {
     "pendente": "#f0ad4e",
     "pago": "#28a745",
 }
+CORES_PGTO = {
+    "pendente": ("#fff3cd", "#856404", "🟡 Pendente"),
+    "pago": ("#d1e7dd", "#0a3622", "🟢 Pago"),
+    "cancelado": ("#f8d7da", "#58151c", "🔴 Cancelado"),
+}
+CORES_ENTREGA = {
+    "pendente": ("#e2e3e5", "#41464b", "⏳ Pendente"),
+    "parcial": ("#cff4fc", "#055160", "🔄 Parcial"),
+    "entregue": ("#d1e7dd", "#0a3622", "✅ Entregue"),
+}
+
+
+def _badge_pill(texto: str, bg: str, cor: str) -> str:
+    return (
+        f'<span style="font-size:11px;background:{bg};color:{cor};'
+        f'padding:2px 8px;border-radius:20px;white-space:nowrap;">{texto}</span>'
+    )
+
+
+def _dias_vencimento(pedido: dict) -> int | None:
+    """Dias até o vencimento — só para pendentes com data de vencimento."""
+    if pedido["status_pagamento"] != "pendente":
+        return None
+    venc = pedido.get("data_vencimento")
+    if not venc:
+        return None
+    return (date.fromisoformat(venc) - date.today()).days
+
+
+@st.dialog("Detalhes do Pedido")
+def _dialog_detalhes(pedido: dict) -> None:
+    """Dialog com itens, datas, documentos e marcar como pago."""
+    numero = pedido.get("numero_pedido") or "—"
+    cond = pedido.get("condominio_nome", "")
+    st.markdown(f"**{numero}** — {cond}" if cond else f"**{numero}**")
+    if pedido.get("data_vencimento"):
+        st.caption(
+            f"{_formatar_data(pedido.get('data_pedido'))} · "
+            f"vence {_formatar_data(pedido['data_vencimento'])}"
+        )
+    else:
+        st.caption(_formatar_data(pedido.get("data_pedido")))
+    st.divider()
+
+    st.subheader("Itens")
+    try:
+        itens = queries.listar_itens_pedido(pedido["id"])
+    except RuntimeError as e:
+        st.error(str(e))
+        itens = []
+    if itens:
+        st.dataframe(
+            [
+                {
+                    "Produto": item["produto"],
+                    "Qtd": item["quantidade"],
+                    "Unit.": _moeda(item["valor_unit"]),
+                    "Total": _moeda(item["valor_total_item"]),
+                }
+                for item in itens
+            ],
+            hide_index=True,
+            use_container_width=True,
+        )
+    else:
+        st.caption("Nenhum item cadastrado.")
+    st.write(f"**Total:** {_moeda(pedido['valor_total'])}")
+
+    if pedido.get("data_entrega"):
+        st.caption(f"Entregue em {_formatar_data(pedido['data_entrega'])}")
+
+    st.divider()
+
+    st.subheader("Documentos")
+    tem_documento = False
+    if pedido.get("nota_fiscal_path"):
+        tem_documento = True
+        _baixar_documento("⬇️ Baixar Nota Fiscal", pedido["nota_fiscal_path"])
+    if pedido.get("boleto_path"):
+        tem_documento = True
+        _baixar_documento("⬇️ Baixar Boleto", pedido["boleto_path"])
+    if pedido.get("linha_digitavel"):
+        tem_documento = True
+        st.code(pedido["linha_digitavel"])
+        st.caption("Copie a linha digitável para pagar o boleto")
+    if not tem_documento:
+        st.caption("Documentos não disponíveis ainda.")
+
+    if pedido["status_pagamento"] == "pendente":
+        st.divider()
+        chave_flag = f"confirmar_pagamento_{pedido['id']}"
+        if not st.session_state.get(chave_flag):
+            if st.button(
+                "✅ Marcar como pago",
+                key=f"btn_pagar_{pedido['id']}",
+                use_container_width=True,
+            ):
+                st.session_state[chave_flag] = True
+                st.rerun()
+        else:
+            st.warning("Confirmar pagamento? Esta ação não pode ser desfeita.")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button(
+                    "✔ Confirmar",
+                    key=f"btn_confirmar_{pedido['id']}",
+                    type="primary",
+                    use_container_width=True,
+                ):
+                    try:
+                        queries.marcar_pedido_como_pago(pedido["id"])
+                        st.session_state.pop(chave_flag, None)
+                        st.success("Marcado como pago com sucesso.")
+                        st.rerun()
+                    except RuntimeError as e:
+                        st.error(str(e))
+                        st.session_state.pop(chave_flag, None)
+            with col2:
+                if st.button(
+                    "✖ Cancelar",
+                    key=f"btn_cancelar_{pedido['id']}",
+                    use_container_width=True,
+                ):
+                    st.session_state.pop(chave_flag, None)
+                    st.rerun()
 
 
 def _render_linha_pedido(pedido: dict, i: int, mostrar_condominio: bool = False) -> None:
-    """Renderiza uma linha compacta de pedido (HTML único) + expander colado."""
+    """Renderiza uma linha compacta de pedido em HTML puro + botão de detalhes."""
     status_pgto = pedido["status_pagamento"]
     cor_borda = COR_BORDA_STATUS.get(status_pgto, "#6c757d")
     bg = COR_BG_PAR if i % 2 == 0 else COR_BG_IMPAR
     data_curta = _formatar_data(pedido["data_pedido"])[:-5]
 
-    badge_pgto = _badge(*BADGES_PAGAMENTO.get(status_pgto, (status_pgto, "#6c757d")))
-    badge_entrega = _badge(
-        *BADGES_ENTREGA.get(pedido["status_entrega"], (pedido["status_entrega"], "#6c757d"))
+    bg_pgto, cor_pgto, texto_pgto = CORES_PGTO.get(
+        status_pgto, ("#e2e3e5", "#41464b", status_pgto)
     )
-    badge_venc = _badge_vencimento(pedido) or ""
+    badge_pgto = _badge_pill(texto_pgto, bg_pgto, cor_pgto)
+
+    status_entrega = pedido["status_entrega"]
+    bg_entrega, cor_entrega, texto_entrega = CORES_ENTREGA.get(
+        status_entrega, ("#e2e3e5", "#41464b", status_entrega)
+    )
+    badge_entrega = _badge_pill(texto_entrega, bg_entrega, cor_entrega)
+
+    dias = _dias_vencimento(pedido)
+    badge_venc = ""
+    if dias is not None:
+        if dias < 0:
+            badge_venc = _badge_pill(f"⚠️ Vencido há {abs(dias)} dia(s)", "#f8d7da", "#58151c")
+        elif dias == 0:
+            badge_venc = _badge_pill("⚠️ Vence hoje", "#f8d7da", "#58151c")
+        elif dias <= 3:
+            badge_venc = _badge_pill(f"⏰ Vence em {dias} dia(s)", "#fff3cd", "#856404")
     badges_html = f"{badge_pgto} {badge_entrega} {badge_venc}"
 
     venc_html = ""
-    if status_pgto == "pendente" and pedido.get("data_vencimento"):
-        dias = (date.fromisoformat(pedido["data_vencimento"]) - date.today()).days
+    if dias is not None:
         cor_v = COR_URGENTE if dias <= 3 else COR_TEXT_TERCIARIA
         venc_html = (
-            f'<div style="font-size:11px; color:{cor_v};">'
-            f'vence {_formatar_data(pedido["data_vencimento"])}</div>'
+            f'<span style="font-size:11px;color:{cor_v};">'
+            f'vence {_formatar_data(pedido["data_vencimento"])}</span>'
         )
     elif status_pgto == "pago":
-        venc_html = f'<div style="font-size:11px; color:{COR_TEXT_TERCIARIA};">pago</div>'
+        venc_html = f'<span style="font-size:11px;color:{COR_TEXT_TERCIARIA};">pago</span>'
 
     cond_html = ""
     if mostrar_condominio:
         cond_html = (
-            f'<span style="font-size:12px; color:{COR_TEXT_SECUNDARIA};">'
+            f'<span style="font-size:12px;color:{COR_TEXT_SECUNDARIA};">'
             f'{pedido.get("condominio_nome", "")}</span>'
         )
 
     st.markdown(
         f"""
-        <div style="border-left:3px solid {cor_borda}; padding:10px 14px;
-                    background:{bg}; border-bottom:0.5px solid {COR_BORDA_SEPARADOR};">
-          <div style="display:flex; justify-content:space-between;
-                      align-items:center; gap:8px;">
-            <div style="flex:1; min-width:0;">
-              <div style="display:flex; align-items:baseline; gap:6px;
-                          margin-bottom:4px; flex-wrap:wrap;">
-                <span style="font-size:12px; color:{COR_TEXT_TERCIARIA};">{data_curta}</span>
-                <span style="font-size:13px; font-weight:500;
-                            color:{COR_TEXT_PRIMARIA};">{pedido.get('numero_pedido') or '—'}</span>
+        <div style="border-left:3px solid {cor_borda};
+                    padding:10px 14px;background:{bg};
+                    border-bottom:0.5px solid {COR_BORDA_SEPARADOR};">
+          <div style="display:flex;justify-content:space-between;
+                      align-items:center;gap:8px;">
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;align-items:baseline;gap:6px;
+                          margin-bottom:5px;flex-wrap:wrap;">
+                <span style="font-size:12px;color:{COR_TEXT_TERCIARIA};">{data_curta}</span>
+                <span style="font-size:13px;font-weight:500;
+                             color:{COR_TEXT_PRIMARIA};">{pedido.get('numero_pedido') or '—'}</span>
                 {cond_html}
               </div>
-              <div style="display:flex; gap:5px; flex-wrap:wrap;">
+              <div style="display:flex;gap:5px;flex-wrap:wrap;">
                 {badges_html}
               </div>
             </div>
-            <div style="text-align:right; white-space:nowrap; flex-shrink:0;
-                        display:flex; flex-direction:column;
-                        align-items:flex-end; gap:4px;">
-              <div style="font-size:13px; font-weight:500;
-                          color:{COR_TEXT_PRIMARIA};">{_moeda(pedido['valor_total'])}</div>
+            <div style="display:flex;flex-direction:column;
+                        align-items:flex-end;gap:4px;flex-shrink:0;">
+              <span style="font-size:13px;font-weight:500;
+                           color:{COR_TEXT_PRIMARIA};">{_moeda(pedido['valor_total'])}</span>
               {venc_html}
-              <div style="font-size:11px; color:{COR_TEXT_SECUNDARIA};">ver detalhes ›</div>
             </div>
           </div>
         </div>
@@ -159,82 +263,8 @@ def _render_linha_pedido(pedido: dict, i: int, mostrar_condominio: bool = False)
         unsafe_allow_html=True,
     )
 
-    with st.expander("", expanded=False):
-        st.subheader("Itens do pedido")
-        try:
-            itens = queries.listar_itens_pedido(pedido["id"])
-        except RuntimeError as e:
-            st.error(str(e))
-            itens = []
-
-        if itens:
-            tabela = [
-                {
-                    "Produto": item["produto"],
-                    "Quantidade": item["quantidade"],
-                    "Valor Unit.": _moeda(item["valor_unit"]),
-                    "Total Item": _moeda(item["valor_total_item"]),
-                }
-                for item in itens
-            ]
-            st.dataframe(tabela, hide_index=True, use_container_width=True)
-        else:
-            st.caption("Nenhum item cadastrado.")
-        st.write(f"**Total do pedido:** {_moeda(pedido['valor_total'])}")
-
-        st.subheader("Datas")
-        st.write(f"**Data do pedido:** {_formatar_data(pedido.get('data_pedido'))}")
-        st.write(
-            f"**Data de vencimento:** {_formatar_data(pedido.get('data_vencimento'))}"
-        )
-        if pedido.get("data_entrega"):
-            st.write(
-                f"**Data de entrega:** {_formatar_data(pedido['data_entrega'])}"
-            )
-
-        st.subheader("Documentos")
-        tem_documento = False
-        if pedido.get("nota_fiscal_path"):
-            tem_documento = True
-            _baixar_documento("⬇️ Baixar Nota Fiscal", pedido["nota_fiscal_path"])
-        if pedido.get("boleto_path"):
-            tem_documento = True
-            _baixar_documento("⬇️ Baixar Boleto", pedido["boleto_path"])
-        if pedido.get("linha_digitavel"):
-            tem_documento = True
-            st.code(pedido["linha_digitavel"])
-            st.caption("Copie a linha digitável para pagar o boleto")
-        if not tem_documento:
-            st.caption("Documentos não disponíveis ainda.")
-
-        if status_pgto == "pendente":
-            st.divider()
-            chave_flag = f"confirmar_pagamento_{pedido['id']}"
-            if not st.session_state.get(chave_flag):
-                if st.button("✅ Marcar como pago", key=f"btn_pagar_{pedido['id']}"):
-                    st.session_state[chave_flag] = True
-                    st.rerun()
-            else:
-                st.warning("Confirmar pagamento? Esta ação não pode ser desfeita.")
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.button(
-                        "✔ Confirmar",
-                        key=f"btn_confirmar_{pedido['id']}",
-                        type="primary",
-                    ):
-                        try:
-                            queries.marcar_pedido_como_pago(pedido["id"])
-                            st.session_state.pop(chave_flag, None)
-                            st.success("Pedido marcado como pago com sucesso.")
-                            st.rerun()
-                        except RuntimeError as e:
-                            st.error(str(e))
-                            st.session_state.pop(chave_flag, None)
-                with col2:
-                    if st.button("✖ Cancelar", key=f"btn_cancelar_{pedido['id']}"):
-                        st.session_state.pop(chave_flag, None)
-                        st.rerun()
+    if st.button("Ver detalhes", key=f"btn_detalhe_{pedido['id']}"):
+        _dialog_detalhes(pedido)
 
 
 def _render_pedidos_agrupados(pedidos: list[dict], mostrar_condominio: bool = False) -> None:
@@ -254,10 +284,12 @@ def _render_pedidos_agrupados(pedidos: list[dict], mostrar_condominio: bool = Fa
             st.markdown(
                 f"""
                 <div style="display:flex; align-items:center; gap:10px;
-                            padding:12px 14px; background:{COR_BG_PAR};">
+                            padding:14px 16px; background:{COR_BG_PAR};
+                            border-bottom:0.5px solid {COR_BORDA_SEPARADOR};
+                            margin:-1rem -1rem 0 -1rem;">
                   <div style="height:1px; flex:1; background:{COR_BORDA_SEPARADOR};"></div>
                   <span style="font-size:18px; font-weight:500; color:{COR_TEXT_SECUNDARIA};
-                               white-space:nowrap; padding:0 12px;">{label}</span>
+                               white-space:nowrap; padding:0 14px;">{label}</span>
                   <div style="height:1px; flex:1; background:{COR_BORDA_SEPARADOR};"></div>
                 </div>
                 """,
