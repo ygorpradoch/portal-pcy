@@ -292,7 +292,7 @@ def _render_linha_pedido(pedido: dict, i: int, mostrar_condominio: bool = False)
               </div>
             </div>
             <div style="display:flex;flex-direction:column;
-                        align-items:flex-end;gap:4px;flex-shrink:0;">
+                        align-items:flex-end;gap:4px;flex-shrink:0;min-height:33px;">
               <span style="font-size:13px;font-weight:500;
                            color:{COR_TEXT_PRIMARIA};">{_moeda(pedido['valor_total'])}</span>
               {venc_html}
