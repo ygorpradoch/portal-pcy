@@ -1,5 +1,6 @@
 from collections import defaultdict
 from datetime import date, timedelta
+from textwrap import dedent
 
 import streamlit as st
 
@@ -10,6 +11,21 @@ set_session_from_state()
 auth.require_auth()
 
 st.title("📦 Meus Pedidos")
+
+st.markdown(
+    dedent("""
+        <style>
+        div[class*="st-key-btn_detalhe_"] button {
+            opacity: 0 !important;
+            margin-top: -2.1rem !important;
+            height: 2rem !important;
+            width: 100% !important;
+            cursor: pointer !important;
+        }
+        </style>
+    """).strip(),
+    unsafe_allow_html=True,
+)
 
 STATUS_PAGAMENTO_OPCOES = ["Todos", "pendente", "pago", "cancelado"]
 FILTROS_CHAVES = (
@@ -232,8 +248,7 @@ def _render_linha_pedido(pedido: dict, i: int, mostrar_condominio: bool = False)
             f'{pedido.get("condominio_nome", "")}</span>'
         )
 
-    st.markdown(
-        f"""
+    html = dedent(f"""
         <div style="border-left:3px solid {cor_borda};
                     padding:10px 14px;background:{bg};
                     border-bottom:0.5px solid {COR_BORDA_SEPARADOR};">
@@ -256,14 +271,16 @@ def _render_linha_pedido(pedido: dict, i: int, mostrar_condominio: bool = False)
               <span style="font-size:13px;font-weight:500;
                            color:{COR_TEXT_PRIMARIA};">{_moeda(pedido['valor_total'])}</span>
               {venc_html}
+              <span style="font-size:11px;color:{COR_TEXT_SECUNDARIA};
+                           border:0.5px solid {COR_BORDA_SEPARADOR};border-radius:6px;
+                           padding:3px 10px;">Ver detalhes ›</span>
             </div>
           </div>
         </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    """).strip()
+    st.markdown(html, unsafe_allow_html=True)
 
-    if st.button("Ver detalhes", key=f"btn_detalhe_{pedido['id']}"):
+    if st.button(" ", key=f"btn_detalhe_{pedido['id']}"):
         _dialog_detalhes(pedido)
 
 
@@ -281,20 +298,15 @@ def _render_pedidos_agrupados(pedidos: list[dict], mostrar_condominio: bool = Fa
         ano, mes_num = mes_key.split("-")
         label = f"{MESES_PT[mes_num]} {ano}"
         with st.container(border=True):
-            st.markdown(
-                f"""
-                <div style="display:flex; align-items:center; gap:10px;
-                            padding:14px 16px; background:{COR_BG_PAR};
-                            border-bottom:0.5px solid {COR_BORDA_SEPARADOR};
-                            margin:-1rem -1rem 0 -1rem;">
-                  <div style="height:1px; flex:1; background:{COR_BORDA_SEPARADOR};"></div>
-                  <span style="font-size:18px; font-weight:500; color:{COR_TEXT_SECUNDARIA};
-                               white-space:nowrap; padding:0 14px;">{label}</span>
-                  <div style="height:1px; flex:1; background:{COR_BORDA_SEPARADOR};"></div>
+            html = dedent(f"""
+                <div style="display:flex;align-items:center;gap:10px;padding:14px 16px;">
+                  <div style="height:1px;flex:1;background:{COR_BORDA_SEPARADOR};"></div>
+                  <span style="font-size:18px;font-weight:500;color:{COR_TEXT_SECUNDARIA};
+                               white-space:nowrap;padding:0 14px;">{label}</span>
+                  <div style="height:1px;flex:1;background:{COR_BORDA_SEPARADOR};"></div>
                 </div>
-                """,
-                unsafe_allow_html=True,
-            )
+            """).strip()
+            st.markdown(html, unsafe_allow_html=True)
             for i, pedido in enumerate(grupos[mes_key]):
                 _render_linha_pedido(pedido, i, mostrar_condominio)
 
